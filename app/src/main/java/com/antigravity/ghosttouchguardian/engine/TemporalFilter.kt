@@ -1,20 +1,28 @@
 package com.antigravity.ghosttouchguardian.engine
 
+import com.antigravity.ghosttouchguardian.model.GhostTouchProfile
+
 /**
  * Ultra-lightweight O(1) Temporal Debounce and Echo Filter.
  * Executes in ~2-3 nanoseconds on Snapdragon 8 Gen 2 (S23 Ultra).
  * Zero heap allocations, pure primitive comparison.
+ * Nullifies trailing ghost release touches system-wide.
  */
 class TemporalFilter {
 
     @Volatile
     var isEnabled: Boolean = true
 
-    // Configurable cooldown window (calibrated via profiler)
-    var echoCooldownWindowMs: Long = 45L
-    var minValidDwellTimeMs: Int = 20
+    // Dynamic cooldown window calibrated per profile
+    var echoCooldownWindowMs: Long = GhostTouchProfile.BALANCED.echoWindowMs
+    var minValidDwellTimeMs: Int = GhostTouchProfile.BALANCED.maxDwellMs
 
     private var lastValidReleaseTimestamp: Long = 0L
+
+    fun applyProfile(profile: GhostTouchProfile) {
+        echoCooldownWindowMs = profile.echoWindowMs
+        minValidDwellTimeMs = profile.maxDwellMs
+    }
 
     /**
      * Determines whether an incoming touch is a phantom echo and should be suppressed.
@@ -26,7 +34,7 @@ class TemporalFilter {
         if (isDown) {
             val delta = eventTime - lastValidReleaseTimestamp
             if (lastValidReleaseTimestamp > 0L && delta in 2L..echoCooldownWindowMs) {
-                // Ghost Echo detected within the cooldown window!
+                // Ghost Echo detected within cooldown window!
                 return true
             }
         }

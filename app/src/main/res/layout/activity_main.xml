@@ -13,21 +13,20 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:paddingTop="16dp"
-        android:paddingBottom="24dp">
+        android:paddingBottom="32dp">
 
-        <!-- ═══ APP HEADER ═══ -->
+        <!-- ═══ 1. APP BAR & HEADER ═══ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingBottom="4dp">
+            android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="52dp"
-                android:layout_height="52dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:src="@drawable/ic_shield"
-                android:contentDescription="Shield icon"
+                android:contentDescription="Shield Logo"
                 app:tint="@color/accent_blue" />
 
             <LinearLayout
@@ -43,42 +42,199 @@
                     android:text="@string/app_name"
                     android:textColor="@color/text_primary"
                     android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.01" />
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tvGuardianStatus"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="● Guardian Active"
+                    android:layout_marginTop="2dp"
+                    android:text="Guardian Active (0% Screen-Off Battery)"
                     android:textColor="@color/valid_green"
-                    android:textSize="13sp"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- BUG FIX: Toggle button shows current state clearly -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnToggleGuardian"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="80dp"
-                android:layout_height="40dp"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:minHeight="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:text="Pause"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp"
-                android:minHeight="0dp"
-                app:strokeColor="@color/card_border"
-                app:cornerRadius="10dp" />
+                app:cornerRadius="10dp"
+                app:strokeColor="@color/card_border" />
         </LinearLayout>
 
-        <!-- ═══ HERO CARD: TEST LAB ═══ -->
+        <!-- ═══ 2. SENSITIVITY PROFILE SELECTOR CARD ═══ -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="@color/card_dark"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/card_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="GHOST DETECTION PROFILE"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06" />
+
+                <TextView
+                    android:id="@+id/tvActiveProfileTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Balanced Protection"
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvActiveProfileSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Optimal for daily use: suppresses micro-sparks and release echoes"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <!-- Profile Choice Buttons Row 1 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnProfileBalanced"
+                        style="@style/Widget.MaterialComponents.Button"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:text="Balanced"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/accent_blue"
+                        app:cornerRadius="10dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnProfileSparks"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:text="Micro-Sparks"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/card_border" />
+                </LinearLayout>
+
+                <!-- Profile Choice Buttons Row 2 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnProfileEcho"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:text="Trailing Echo"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/card_border" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnProfileUVGlue"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:text="Heavy UV Glue"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/card_border" />
+                </LinearLayout>
+
+                <!-- Current physical thresholds strip -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="#0A1220"
+                    android:orientation="horizontal"
+                    android:padding="10dp">
+
+                    <TextView
+                        android:id="@+id/tvMetricDwell"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Dwell: &lt; 35ms"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvMetricEcho"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Echo: 55ms"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvMetricSize"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Size: &lt; 0.045"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ═══ 3. PRIMARY HERO CARD: OPEN TEST LAB ═══ -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardOpenLab"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="14dp"
             android:clickable="true"
             android:focusable="true"
-            app:cardBackgroundColor="#0D1626"
+            app:cardBackgroundColor="#0D172A"
             app:cardCornerRadius="18dp"
             app:cardElevation="0dp"
             app:strokeColor="@color/accent_blue"
@@ -93,41 +249,49 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🔬  Ghost Touch Test Lab"
+                    android:text="DIAGNOSTIC TEST LAB"
                     android:textColor="@color/accent_cyan"
-                    android:textSize="17sp"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Ghost Touch Test Arena"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="Dedicated full-screen arena. Screen locks against ghost taps. Only a real finger can exit via the slide-to-exit bar."
+                    android:text="Interactive testing arena. Screen is locked against phantom clicks. Includes 3 diagnostic modes and personal human tap calibration."
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:lineSpacingExtra="2dp" />
 
-                <!-- BUG FIX: single tap target — card click + button both launch lab -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnLaunchTestLab"
                     style="@style/Widget.MaterialComponents.Button"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:layout_marginTop="14dp"
-                    android:text="▶  START TEST LAB"
+                    android:text="START GHOST TOUCH TEST"
                     android:textSize="15sp"
                     android:textStyle="bold"
-                    android:letterSpacing="0.04"
                     app:backgroundTint="@color/accent_blue"
                     app:cornerRadius="12dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ═══ LIVE TELEMETRY CARD ═══ -->
+        <!-- ═══ 4. LIVE TELEMETRY CARD ═══ -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="14dp"
             app:cardBackgroundColor="@color/card_dark"
             app:cardCornerRadius="16dp"
             app:cardElevation="0dp"
@@ -147,9 +311,8 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    android:letterSpacing="0.08" />
+                    android:letterSpacing="0.06" />
 
-                <!-- BUG FIX: equal-width columns with min height for touch -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -161,13 +324,12 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:gravity="start">
+                        android:orientation="vertical">
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Ghost Touches"
+                            android:text="Ghost Taps"
                             android:textColor="@color/text_muted"
                             android:textSize="12sp" />
 
@@ -177,11 +339,10 @@
                             android:layout_height="wrap_content"
                             android:text="0"
                             android:textColor="@color/ghost_red"
-                            android:textSize="30sp"
+                            android:textSize="28sp"
                             android:textStyle="bold" />
                     </LinearLayout>
 
-                    <!-- BUG FIX: divider has fixed height so it always shows -->
                     <View
                         android:layout_width="1dp"
                         android:layout_height="48dp"
@@ -193,13 +354,12 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:orientation="vertical"
-                        android:gravity="start"
                         android:paddingStart="12dp">
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Trailing Echoes"
+                            android:text="Release Echoes"
                             android:textColor="@color/text_muted"
                             android:textSize="12sp" />
 
@@ -209,7 +369,7 @@
                             android:layout_height="wrap_content"
                             android:text="0"
                             android:textColor="#FFA726"
-                            android:textSize="30sp"
+                            android:textSize="28sp"
                             android:textStyle="bold" />
                     </LinearLayout>
 
@@ -224,7 +384,6 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:orientation="vertical"
-                        android:gravity="start"
                         android:paddingStart="12dp">
 
                         <TextView
@@ -247,11 +406,11 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ═══ SAMSUNG TSP CARD ═══ -->
+        <!-- ═══ 5. SAMSUNG TSP FIX CARD ═══ -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="14dp"
             app:cardBackgroundColor="@color/card_dark"
             app:cardCornerRadius="16dp"
             app:cardElevation="0dp"
@@ -264,21 +423,19 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <!-- BUG FIX: shorter title that fits on small screens without wrap -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="SAMSUNG TSP RECALIBRATION"
+                    android:text="SAMSUNG HARDWARE CALIBRATION"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05" />
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
-                    android:text="Resets hardware capacitance baseline via Samsung service menu *#2663#. Fixes ghost touch drift permanently."
+                    android:text="Direct shortcut to Samsung's secret service menu (*#2663#) to recalibrate capacitive digitizer baseline."
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:lineSpacingExtra="2dp" />
@@ -289,7 +446,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:layout_marginTop="12dp"
-                    android:text="OPEN  *#2663#  TSP FIX"
+                    android:text="OPEN *#2663# TSP FIX"
                     android:textColor="@color/accent_cyan"
                     android:textSize="14sp"
                     android:textStyle="bold"
@@ -298,12 +455,11 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ═══ BOTTOM ACTIONS ═══ -->
-        <!-- BUG FIX: buttons have enough min-height for touch (48dp+) -->
+        <!-- ═══ 6. SYSTEM ACTION BUTTONS ═══ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="14dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
@@ -313,10 +469,10 @@
                 android:layout_height="48dp"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
-                android:text="🗑  Flush Memory"
+                android:minHeight="0dp"
+                android:text="Flush Memory"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp"
-                android:minHeight="0dp"
                 app:cornerRadius="12dp"
                 app:strokeColor="@color/card_border" />
 
@@ -327,93 +483,13 @@
                 android:layout_height="48dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
-                android:text="⚙  Accessibility"
+                android:minHeight="0dp"
+                android:text="Accessibility"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp"
-                android:minHeight="0dp"
                 app:cornerRadius="12dp"
                 app:strokeColor="@color/card_border" />
         </LinearLayout>
-
-        <!-- ═══ SERVICE STATUS CHIPS ═══ -->
-        <!-- BUG FIX: added status chips so user knows all services are running -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            app:cardBackgroundColor="@color/card_dark"
-            app:cardCornerRadius="14dp"
-            app:cardElevation="0dp"
-            app:strokeColor="@color/card_border"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="14dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SERVICE STATUS"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/chipForeground"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="#1A3D7EFE"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:paddingTop="5dp"
-                        android:paddingBottom="5dp"
-                        android:text="✓ Foreground"
-                        android:textColor="@color/accent_blue"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/chipAutoStart"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:background="#1A00E676"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:paddingTop="5dp"
-                        android:paddingBottom="5dp"
-                        android:text="✓ Auto-Start"
-                        android:textColor="@color/valid_green"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/chipBattery"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:background="#1A00E676"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:paddingTop="5dp"
-                        android:paddingBottom="5dp"
-                        android:text="✓ 0% Screen-off"
-                        android:textColor="@color/valid_green"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 </ScrollView>

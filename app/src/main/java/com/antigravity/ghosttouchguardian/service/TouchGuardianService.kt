@@ -14,19 +14,22 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.antigravity.ghosttouchguardian.R
+import com.antigravity.ghosttouchguardian.data.GuardianPreferences
 import com.antigravity.ghosttouchguardian.engine.TemporalFilter
 import com.antigravity.ghosttouchguardian.engine.TouchProfilerEngine
 import com.antigravity.ghosttouchguardian.ui.MainActivity
 
 /**
  * Persistent, ultra-low memory background service.
+ * Keeps running in the background when app is closed to nullify ghost touches system-wide.
  * Memory footprint: ~15-25 KB total.
  * Battery drain when screen is off: 0.00%.
  */
 class TouchGuardianService : Service() {
 
-    private val temporalFilter = TemporalFilter()
+    val temporalFilter = TemporalFilter()
     val profiler = TouchProfilerEngine()
+    private lateinit var prefs: GuardianPreferences
 
     private var screenReceiver: ScreenStateReceiver? = null
     private var isScreenActive: Boolean = true
@@ -34,9 +37,17 @@ class TouchGuardianService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        prefs = GuardianPreferences(this)
+
+        // Load saved profile & thresholds
+        val profile = prefs.currentProfile
+        profiler.profile = profile
+        temporalFilter.applyProfile(profile)
+        temporalFilter.isEnabled = prefs.isGuardianEnabled
+
         createNotificationChannel()
 
-        val notification = buildNotification(true)
+        val notification = buildNotification(temporalFilter.isEnabled)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -47,7 +58,7 @@ class TouchGuardianService : Service() {
         screenReceiver = ScreenStateReceiver(
             onScreenOn = {
                 isScreenActive = true
-                temporalFilter.isEnabled = true
+                temporalFilter.isEnabled = prefs.isGuardianEnabled
             },
             onScreenOff = {
                 isScreenActive = false
@@ -74,6 +85,15 @@ class TouchGuardianService : Service() {
         when (intent?.action) {
             ACTION_TOGGLE -> {
                 temporalFilter.isEnabled = !temporalFilter.isEnabled
+                prefs.isGuardianEnabled = temporalFilter.isEnabled
+                val notification = buildNotification(temporalFilter.isEnabled)
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(NOTIFICATION_ID, notification)
+            }
+            ACTION_UPDATE_PROFILE -> {
+                val profile = prefs.currentProfile
+                profiler.profile = profile
+                temporalFilter.applyProfile(profile)
                 val notification = buildNotification(temporalFilter.isEnabled)
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.notify(NOTIFICATION_ID, notification)
@@ -93,7 +113,6 @@ class TouchGuardianService : Service() {
     @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        // Aggressively flush memory whenever OS signals memory pressure
         if (level >= TRIM_MEMORY_RUNNING_LOW || level >= TRIM_MEMORY_BACKGROUND) {
             profiler.flush()
             temporalFilter.flush()
@@ -124,7 +143,8 @@ class TouchGuardianService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val statusText = if (isActive) getString(R.string.status_running) else getString(R.string.status_paused)
+        val profileTitle = profiler.profile.title
+        val statusText = if (isActive) "$profileTitle Active" else getString(R.string.status_paused)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
@@ -166,6 +186,7 @@ class TouchGuardianService : Service() {
         const val ACTION_STOP = "com.antigravity.guardian.STOP"
         const val ACTION_TOGGLE = "com.antigravity.guardian.TOGGLE"
         const val ACTION_FLUSH = "com.antigravity.guardian.FLUSH"
+        const val ACTION_UPDATE_PROFILE = "com.antigravity.guardian.UPDATE_PROFILE"
 
         @Volatile
         var instance: TouchGuardianService? = null

@@ -8,9 +8,9 @@
     android:paddingStart="12dp"
     android:paddingEnd="12dp"
     android:paddingTop="12dp"
-    android:paddingBottom="0dp">
+    android:paddingBottom="8dp">
 
-    <!-- ═══ TOP BAR ═══ -->
+    <!-- ═══ 1. TOP HEADER & SCREEN LOCK STATUS ═══ -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -31,75 +31,90 @@
                 android:textSize="17sp"
                 android:textStyle="bold" />
 
-            <!-- BUG FIX: 13sp→12sp — fits S23 Ultra without truncation -->
             <TextView
                 android:id="@+id/tvLockStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🔒 Locked — only real finger can exit"
+                android:layout_marginTop="2dp"
+                android:text="Screen Locked: Ghost clicks cannot exit or close app"
                 android:textColor="@color/valid_green"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- BUG FIX: Clear Canvas has proper touch target -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnFlushLab"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:minHeight="0dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
             android:text="Clear"
             android:textColor="@color/accent_cyan"
-            android:textSize="13sp"
-            app:strokeColor="@color/accent_cyan"
-            app:cornerRadius="10dp" />
+            android:textSize="12sp"
+            app:cornerRadius="10dp"
+            app:strokeColor="@color/accent_cyan" />
     </LinearLayout>
 
-    <!-- ═══ MODE TABS ═══ -->
-    <!-- BUG FIX: 52dp height → 46dp so canvas gets more space on compact screens -->
+    <!-- ═══ 2. 3-MODE SELECTOR TABS ═══ -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="8dp"
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnLabIdleMode"
             style="@style/Widget.MaterialComponents.Button"
             android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_marginEnd="5dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="3dp"
             android:layout_weight="1"
             android:minHeight="0dp"
-            android:text="Mode 1: Hands-Free"
-            android:textSize="13sp"
+            android:text="1: Hands-Free"
+            android:textSize="11sp"
             android:textStyle="bold"
             app:backgroundTint="@color/accent_blue"
-            app:cornerRadius="12dp" />
+            app:cornerRadius="10dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnLabEchoMode"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_marginStart="5dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="3dp"
             android:layout_weight="1"
             android:minHeight="0dp"
-            android:text="Mode 2: Echo Test"
+            android:text="2: Finger Echo"
             android:textColor="@color/text_primary"
-            android:textSize="13sp"
+            android:textSize="11sp"
             android:textStyle="bold"
-            app:strokeColor="@color/card_border"
-            app:cornerRadius="12dp" />
+            app:cornerRadius="10dp"
+            app:strokeColor="@color/card_border" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLabCalibrateMode"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="3dp"
+            android:layout_weight="1.2"
+            android:minHeight="0dp"
+            android:text="3: Calibrate Screen"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            app:cornerRadius="10dp"
+            app:strokeColor="@color/card_border" />
     </LinearLayout>
 
-    <!-- ═══ TELEMETRY ROW ═══ -->
-    <!-- BUG FIX: rounded corners (was flat rectangle) + divider fixed height -->
+    <!-- ═══ 3. TELEMETRY STRIP ═══ -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         app:cardBackgroundColor="@color/card_dark"
         app:cardCornerRadius="12dp"
         app:cardElevation="0dp"
@@ -110,8 +125,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="10dp"
-            android:minHeight="60dp">
+            android:padding="8dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -123,7 +137,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Ghost"
+                    android:text="Ghost Taps"
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
 
@@ -133,13 +147,13 @@
                     android:layout_height="wrap_content"
                     android:text="0"
                     android:textColor="@color/ghost_red"
-                    android:textSize="26sp"
+                    android:textSize="22sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <View
                 android:layout_width="1dp"
-                android:layout_height="40dp"
+                android:layout_height="36dp"
                 android:layout_gravity="center_vertical"
                 android:background="@color/card_border" />
 
@@ -153,7 +167,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Echo"
+                    android:text="Trailing Echoes"
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
 
@@ -163,13 +177,13 @@
                     android:layout_height="wrap_content"
                     android:text="0"
                     android:textColor="#FFA726"
-                    android:textSize="26sp"
+                    android:textSize="22sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <View
                 android:layout_width="1dp"
-                android:layout_height="40dp"
+                android:layout_height="36dp"
                 android:layout_gravity="center_vertical"
                 android:background="@color/card_border" />
 
@@ -183,14 +197,14 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="RAM"
+                    android:text="RAM Buffer"
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="~3.6KB"
+                    android:text="~3.6 KB"
                     android:textColor="@color/valid_green"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -198,22 +212,21 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- ═══ INSTRUCTION BANNER ═══ -->
-    <!-- BUG FIX: rounded corners + left-aligned text (was center-aligned, hard to read) -->
+    <!-- ═══ 4. DYNAMIC INSTRUCTION BANNER ═══ -->
     <TextView
         android:id="@+id/tvLabInstructions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:background="#0F1A2B"
-        android:padding="10dp"
-        android:text="[Hands-Off] Place phone on table. Any touch = Ghost touch."
-        android:textAlignment="textStart"
+        android:padding="8dp"
+        android:text="Hands-Off Test: Phone on table. Any touch is auto-flagged as Ghost."
+        android:textAlignment="center"
         android:textColor="@color/accent_cyan"
         android:textSize="12sp"
         android:textStyle="bold" />
 
-    <!-- ═══ FULLSCREEN TOUCH CANVAS (takes all remaining height) ═══ -->
+    <!-- ═══ 5. TOUCH CANVAS ARENA ═══ -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -227,13 +240,11 @@
             android:layout_height="match_parent" />
     </FrameLayout>
 
-    <!-- ═══ HUMAN EXIT SLIDER ═══ -->
-    <!-- BUG FIX: 64dp→72dp — bigger touch target, easier to slide -->
+    <!-- ═══ 6. HUMAN EXIT SLIDER (GHOST-PROOF) ═══ -->
     <com.antigravity.ghosttouchguardian.ui.HumanExitSliderView
         android:id="@+id/humanExitSlider"
         android:layout_width="match_parent"
-        android:layout_height="72dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp" />
+        android:layout_height="64dp"
+        android:layout_marginTop="6dp" />
 
 </LinearLayout>

@@ -13,6 +13,7 @@ import com.antigravity.ghosttouchguardian.model.CompactTouchBuffer
 /**
  * High-performance, zero-allocation touch canvas view.
  * Renders touch events and ghost indicators with large, prominent labels and background pills.
+ * Clamps labels to view boundaries so text never clips off-screen.
  */
 class TouchCanvasView @JvmOverloads constructor(
     context: Context,
@@ -54,14 +55,13 @@ class TouchCanvasView @JvmOverloads constructor(
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFF1F5F9.toInt()
-        textSize = 48f // Prominent, bold and crystal clear
+        textSize = 38f
         isFakeBoldText = true
     }
 
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFF64748B.toInt()
-        // BUG FIX: 52f was too large — overflowed screen width on S23 Ultra canvas
-        textSize = 36f
+        textSize = 34f
         textAlign = Paint.Align.CENTER
         isFakeBoldText = false
     }
@@ -82,13 +82,11 @@ class TouchCanvasView @JvmOverloads constructor(
         val count = buffer.size
 
         if (count == 0) {
-            // BUG FIX: two-line hint so it doesn't overflow canvas width
             canvas.drawText("CANVAS READY", width / 2f, height / 2f - 24f, hintPaint)
             canvas.drawText("Touch screen or place phone on table", width / 2f, height / 2f + 24f, hintPaint)
             return
         }
 
-        // Draw points directly from primitive arrays with zero object allocation
         val xArr = buffer.xCoords
         val yArr = buffer.yCoords
         val typeArr = buffer.eventTypes
@@ -107,17 +105,17 @@ class TouchCanvasView @JvmOverloads constructor(
             when (type) {
                 CompactTouchBuffer.TYPE_GHOST_IDLE -> {
                     canvas.drawCircle(x, y, radius, ghostIdlePaint)
-                    val label = "GHOST IDLE (${dwell}ms)"
-                    drawPillLabel(canvas, label, x + 40f, y - 10f, 0xFFFF4B4B.toInt())
+                    val label = "GHOST ($dwell ms)"
+                    drawPillLabel(canvas, label, x, y, 0xFFFF4B4B.toInt())
                 }
                 CompactTouchBuffer.TYPE_GHOST_ECHO -> {
                     canvas.drawCircle(x, y, radius * 1.3f, ghostEchoPaint)
-                    val label = "TRAILING ECHO (${dwell}ms)"
-                    drawPillLabel(canvas, label, x + 40f, y - 10f, 0xFFFF9100.toInt())
+                    val label = "ECHO ($dwell ms)"
+                    drawPillLabel(canvas, label, x, y, 0xFFFF9100.toInt())
                 }
                 CompactTouchBuffer.TYPE_SPEN -> {
                     canvas.drawCircle(x, y, 28f, spenPaint)
-                    drawPillLabel(canvas, "S PEN ACTIVE", x + 40f, y - 10f, 0xFFB388FF.toInt())
+                    drawPillLabel(canvas, "S PEN", x, y, 0xFFB388FF.toInt())
                 }
                 else -> {
                     canvas.drawCircle(x, y, radius, humanPaint)
@@ -129,10 +127,15 @@ class TouchCanvasView @JvmOverloads constructor(
     private fun drawPillLabel(canvas: Canvas, text: String, x: Float, y: Float, accentColor: Int) {
         val textWidth = textPaint.measureText(text)
         val pad = 16f
-        pillRect.set(x - pad, y - 40f, x + textWidth + pad, y + 16f)
+        var startX = x + 40f
+        if (startX + textWidth + pad > width - 16f) {
+            startX = x - textWidth - 40f - pad
+        }
+        if (startX < 16f) startX = 16f
 
+        pillRect.set(startX - pad, y - 36f, startX + textWidth + pad, y + 16f)
         canvas.drawRoundRect(pillRect, 12f, 12f, labelBgPaint)
         textPaint.color = accentColor
-        canvas.drawText(text, x, y, textPaint)
+        canvas.drawText(text, startX, y, textPaint)
     }
 }
