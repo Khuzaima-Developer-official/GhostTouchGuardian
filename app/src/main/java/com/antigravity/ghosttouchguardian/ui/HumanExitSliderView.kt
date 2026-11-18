@@ -1,5 +1,6 @@
 package com.antigravity.ghosttouchguardian.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -7,17 +8,8 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 
-/**
- * Anti-Ghost Touch Human Verification Exit Slider.
- * Specifically engineered to be UNLOCKABLE by ghost touches.
- *
- * Requirements to Unlock:
- * 1. Continuous human flesh contact (event.size >= 0.06).
- * 2. Uninterrupted stroke duration (>= 300ms).
- * 3. Smooth directional drag vector from left knob to right threshold.
- * Ghost micro-clicks and static noise will be discarded.
- */
 class HumanExitSliderView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -26,37 +18,43 @@ class HumanExitSliderView @JvmOverloads constructor(
 
     var onHumanVerifiedExit: (() -> Unit)? = null
 
+    // Track paint
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFF141A26.toInt()
         style = Paint.Style.FILL
     }
 
+    // Border paint
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFF2A364F.toInt()
         style = Paint.Style.STROKE
         strokeWidth = 3f
     }
 
+    // Progress paint
     private val progressPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0x5500D2FF.toInt()
         style = Paint.Style.FILL
     }
 
+    // Knob paint
     private val knobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFF3D7EFE.toInt()
         style = Paint.Style.FILL
     }
 
+    // Text paint
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFCBD5E1.toInt()
-        textSize = 38f
+        textSize = 34f
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
     }
 
+    // Hint paint
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFF64748B.toInt()
-        textSize = 28f
+        textSize = 26f
         textAlign = Paint.Align.CENTER
     }
 
@@ -77,12 +75,11 @@ class HumanExitSliderView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val x = event.x
-        val y = event.y
         val touchSize = event.size
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                // Human verification rule 1: Must initiate touch within knob area
+                // Knob check
                 val distFromKnob = Math.abs(x - knobX)
                 if (distFromKnob <= knobRadius * 1.5f) {
                     isDragging = true
@@ -92,19 +89,17 @@ class HumanExitSliderView @JvmOverloads constructor(
 
             MotionEvent.ACTION_MOVE -> {
                 if (isDragging) {
-                    // Human verification rule 2: Flesh contact area check (Ghost touch size is ~0.00 to 0.02)
-                    // Human fingers are typically >= 0.06
                     val minX = trackRect.left + knobRadius
                     val maxX = trackRect.right - knobRadius
 
-                    // Constrain knob within track
+                    // Bound knob
                     knobX = x.coerceIn(minX, maxX)
                     invalidate()
 
-                    // Check if dragged to the finish line
+                    // Threshold check
                     if (knobX >= maxX - 10f) {
                         val strokeDuration = event.eventTime - dragStartTime
-                        // Human verification rule 3: Must take at least 250ms (humans drag; ghost taps teleport)
+                        // Human check
                         if (strokeDuration >= 200L && touchSize >= 0.04f) {
                             isDragging = false
                             onHumanVerifiedExit?.invoke()
@@ -115,12 +110,12 @@ class HumanExitSliderView @JvmOverloads constructor(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 isDragging = false
-                // BUG FIX: animate knob back to start (was instant snap — jarring UX)
+                // Smooth reset
                 val startX = knobX
                 val endX = trackRect.left + knobRadius
-                val animator = android.animation.ValueAnimator.ofFloat(startX, endX).apply {
+                val animator = ValueAnimator.ofFloat(startX, endX).apply {
                     duration = 200
-                    interpolator = android.view.animation.DecelerateInterpolator()
+                    interpolator = DecelerateInterpolator()
                     addUpdateListener {
                         knobX = it.animatedValue as Float
                         invalidate()
@@ -136,20 +131,20 @@ class HumanExitSliderView @JvmOverloads constructor(
         super.onDraw(canvas)
         val cornerRadius = trackRect.height() / 2f
 
-        // 1. Background Track
+        // Draw track
         canvas.drawRoundRect(trackRect, cornerRadius, cornerRadius, trackPaint)
         canvas.drawRoundRect(trackRect, cornerRadius, cornerRadius, borderPaint)
 
-        // 2. Sliding Progress Fill
+        // Draw progress
         progressRect.set(trackRect.left, trackRect.top, knobX + knobRadius, trackRect.bottom)
         canvas.drawRoundRect(progressRect, cornerRadius, cornerRadius, progressPaint)
 
-        // 3. Center Guide Text
-        val textY = trackRect.centerY() - 6f
-        canvas.drawText(">>> SLIDE TO EXIT LAB >>>", trackRect.centerX(), textY, textPaint)
-        canvas.drawText("Human Finger Verified (Ghost-Proof)", trackRect.centerX(), textY + 40f, hintPaint)
+        // Draw text
+        val textY = trackRect.centerY() - 4f
+        canvas.drawText(">>> SLIDE TO EXIT >>>", trackRect.centerX(), textY, textPaint)
+        canvas.drawText("Human Finger Verified", trackRect.centerX(), textY + 34f, hintPaint)
 
-        // 4. Draggable Knob
+        // Draw knob
         canvas.drawCircle(knobX, trackRect.centerY(), knobRadius - 6f, knobPaint)
     }
 }

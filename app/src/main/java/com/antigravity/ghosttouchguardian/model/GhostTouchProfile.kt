@@ -1,13 +1,5 @@
 package com.antigravity.ghosttouchguardian.model
 
-/**
- * Multi-Signature Diagnostic Profiles for capacitive touch anomalies.
- * Allows tailoring detection heuristics to the specific physical cause:
- * - Electrical AC ripple noise / micro-sparks
- * - Sticky digitizer trailing release echoes
- * - UV glue / moisture / temperature smudges
- * - User-calibrated custom baseline
- */
 enum class GhostTouchProfile(
     val id: String,
     val title: String,
@@ -19,8 +11,8 @@ enum class GhostTouchProfile(
 ) {
     BALANCED(
         id = "balanced",
-        title = "Balanced Protection",
-        subtitle = "Optimal for daily use: suppresses micro-sparks & release echoes",
+        title = "Balanced",
+        subtitle = "Optimal balance for daily phone usage",
         maxDwellMs = 35,
         maxContactSize = 0.045f,
         echoWindowMs = 55L,
@@ -29,8 +21,8 @@ enum class GhostTouchProfile(
 
     MICRO_SPARKS(
         id = "micro_sparks",
-        title = "Micro-Spark Filter",
-        subtitle = "Fast electrical noise (charger ripple / static charge)",
+        title = "Gaming Safe",
+        subtitle = "Fast electrical noise filter without input lag",
         maxDwellMs = 22,
         maxContactSize = 0.030f,
         echoWindowMs = 35L,
@@ -39,8 +31,8 @@ enum class GhostTouchProfile(
 
     TRAILING_ECHO(
         id = "trailing_echo",
-        title = "Trailing Echo Suppressor",
-        subtitle = "Phantoms appearing immediately after lifting your finger",
+        title = "Trailing Echo",
+        subtitle = "Suppresses phantom taps after finger release",
         maxDwellMs = 45,
         maxContactSize = 0.055f,
         echoWindowMs = 75L,
@@ -49,26 +41,17 @@ enum class GhostTouchProfile(
 
     SEVERE_UV_GLUE(
         id = "severe_uv_glue",
-        title = "Heavy / UV Glue Filter",
-        subtitle = "Aggressive filter for tempered glass glue or damaged digitizers",
-        maxDwellMs = 60,
-        maxContactSize = 0.075f,
-        echoWindowMs = 95L,
-        jitterThresholdPx = 6.0f
-    ),
-
-    CUSTOM(
-        id = "custom",
-        title = "User Calibrated",
-        subtitle = "Custom thresholds derived from your phone's diagnostic test",
-        maxDwellMs = 35,
-        maxContactSize = 0.045f,
-        echoWindowMs = 55L,
-        jitterThresholdPx = 3.0f
+        title = "High (Damaged)",
+        subtitle = "Aggressive filter for UV glue or digitizer cracks",
+        maxDwellMs = 55,
+        maxContactSize = 0.070f,
+        echoWindowMs = 85L,
+        jitterThresholdPx = 5.5f
     );
 
     companion object {
         fun fromId(id: String): GhostTouchProfile {
+            // Find profile
             return values().firstOrNull { it.id == id } ?: BALANCED
         }
     }

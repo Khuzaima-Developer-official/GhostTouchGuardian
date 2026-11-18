@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
+            // Start service
             startGuardianService()
         }
     }
@@ -38,24 +39,27 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Init prefs
         prefs = GuardianPreferences(this)
 
-        // Request notification permission on Android 13+
+        // Permission check
         checkAndRequestNotificationPermission()
 
-        // Ensure background guardian service is running
+        // Start service
         startGuardianService()
 
-        // Link profiler engine
+        // Engine link
         engine = TouchGuardianService.instance?.profiler ?: TouchProfilerEngine()
 
-        setupProfileSelectors()
+        setupLevelSelectors()
         setupActions()
+        setupHardwareCard()
         renderActiveProfile(prefs.currentProfile)
     }
 
     override fun onResume() {
         super.onResume()
+        // Refresh UI
         updateDashboard()
         renderActiveProfile(prefs.currentProfile)
     }
@@ -67,6 +71,7 @@ class MainActivity : AppCompatActivity() {
                     Manifest.permission.POST_NOTIFICATIONS
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
+                // Request perm
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
@@ -83,53 +88,46 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupProfileSelectors() {
+    private fun setupLevelSelectors() {
+        // Light mode
+        binding.btnProfileGaming.setOnClickListener {
+            applyProfile(GhostTouchProfile.MICRO_SPARKS)
+        }
+        // Balanced mode
         binding.btnProfileBalanced.setOnClickListener {
             applyProfile(GhostTouchProfile.BALANCED)
         }
-        binding.btnProfileSparks.setOnClickListener {
-            applyProfile(GhostTouchProfile.MICRO_SPARKS)
-        }
-        binding.btnProfileEcho.setOnClickListener {
-            applyProfile(GhostTouchProfile.TRAILING_ECHO)
-        }
-        binding.btnProfileUVGlue.setOnClickListener {
+        // High mode
+        binding.btnProfileAggressive.setOnClickListener {
             applyProfile(GhostTouchProfile.SEVERE_UV_GLUE)
         }
     }
 
     private fun applyProfile(profile: GhostTouchProfile) {
+        // Save prefs
         prefs.currentProfile = profile
         engine.profile = profile
 
-        // Notify background service immediately
+        // Notify service
         val intent = Intent(this, TouchGuardianService::class.java).apply {
             action = TouchGuardianService.ACTION_UPDATE_PROFILE
         }
         startService(intent)
 
         renderActiveProfile(profile)
-        Toast.makeText(this, "Profile: ${profile.title}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "${profile.title} Active", Toast.LENGTH_SHORT).show()
     }
 
     private fun renderActiveProfile(profile: GhostTouchProfile) {
-        binding.tvActiveProfileTitle.text = profile.title
-        binding.tvActiveProfileSubtitle.text = profile.subtitle
+        binding.tvMetricSummary.text = "Filters taps under ${profile.maxDwellMs}ms and release echoes under ${profile.echoWindowMs}ms"
 
-        binding.tvMetricDwell.text = "Dwell: < ${profile.maxDwellMs}ms"
-        binding.tvMetricEcho.text = "Echo: ${profile.echoWindowMs}ms"
-        binding.tvMetricSize.text = "Size: < ${profile.maxContactSize}"
-
-        // Update button visual states
         val buttons = listOf(
+            binding.btnProfileGaming to GhostTouchProfile.MICRO_SPARKS,
             binding.btnProfileBalanced to GhostTouchProfile.BALANCED,
-            binding.btnProfileSparks to GhostTouchProfile.MICRO_SPARKS,
-            binding.btnProfileEcho to GhostTouchProfile.TRAILING_ECHO,
-            binding.btnProfileUVGlue to GhostTouchProfile.SEVERE_UV_GLUE
+            binding.btnProfileAggressive to GhostTouchProfile.SEVERE_UV_GLUE
         )
 
         val activeBg = ContextCompat.getColor(this, R.color.accent_blue)
-        val inactiveBorder = ContextCompat.getColor(this, R.color.card_border)
         val textPrimary = ContextCompat.getColor(this, R.color.text_primary)
         val textWhite = ContextCompat.getColor(this, android.R.color.white)
 
@@ -146,8 +144,54 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupHardwareCard() {
+        // Device check
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val isSamsung = manufacturer.contains("samsung")
+
+        if (isSamsung) {
+            binding.tvHardwareTitle.text = "SAMSUNG TSP RECALIBRATION"
+            binding.tvHardwareDesc.text = "Resets capacitive digitizer baseline via Samsung secret menu (*#2663#)."
+            binding.btnHardwareCalibrate.text = "OPEN *#2663# TSP FIX"
+        } else {
+            binding.tvHardwareTitle.text = "TOUCH SENSITIVITY CALIBRATION"
+            binding.tvHardwareDesc.text = "Universal display touch sensitivity and touch latency calibration for ${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }}."
+            binding.btnHardwareCalibrate.text = "CALIBRATE TOUCH SENSITIVITY"
+        }
+
+        binding.btnHardwareCalibrate.setOnClickListener {
+            if (isSamsung) {
+                // Samsung dialer
+                AlertDialog.Builder(this)
+                    .setTitle("Samsung TSP Recalibration")
+                    .setMessage(
+                        "1. Dial *#2663#\n" +
+                        "2. Tap 'TSP FW update (General)'\n" +
+                        "3. Wait for 'PASS' without touching screen"
+                    )
+                    .setPositiveButton("Open Dialer") { _, _ ->
+                        val intent = Intent(Intent.ACTION_DIAL).apply {
+                            data = Uri.parse("tel:" + Uri.encode("*#2663#"))
+                        }
+                        startActivity(intent)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            } else {
+                // Universal settings
+                try {
+                    val intent = Intent(Settings.ACTION_DISPLAY_SETTINGS)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = Intent(Settings.ACTION_SETTINGS)
+                    startActivity(intent)
+                }
+            }
+        }
+    }
+
     private fun setupActions() {
-        // Launch Dedicated Fullscreen Test Lab
+        // Open lab
         binding.btnLaunchTestLab.setOnClickListener {
             startActivity(Intent(this, TestLabActivity::class.java))
         }
@@ -156,7 +200,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, TestLabActivity::class.java))
         }
 
-        // Toggle Guardian Background state
+        // Toggle service
         binding.btnToggleGuardian.setOnClickListener {
             val intent = Intent(this, TouchGuardianService::class.java).apply {
                 action = TouchGuardianService.ACTION_TOGGLE
@@ -165,49 +209,29 @@ class MainActivity : AppCompatActivity() {
 
             val isNowActive = binding.btnToggleGuardian.text != "Pause"
             binding.btnToggleGuardian.text = if (isNowActive) "Pause" else "Resume"
-            binding.tvGuardianStatus.text = if (isNowActive) "Guardian Active (0% Screen-Off Battery)" else "Guardian Paused"
+            binding.tvGuardianStatus.text = if (isNowActive) "Guardian Active (Background Protection)" else "Guardian Paused"
             binding.tvGuardianStatus.setTextColor(
                 if (isNowActive) ContextCompat.getColor(this, R.color.valid_green)
                 else 0xFFFF9100.toInt()
             )
         }
 
-        // Flush Memory Button
+        // Flush buffer
         binding.btnFlushMemory.setOnClickListener {
             engine.flush()
             System.gc()
             updateDashboard()
-            Toast.makeText(this, "Memory Purged: Primitive buffers zeroed (0 bytes active)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Memory Purged (0 B active)", Toast.LENGTH_SHORT).show()
         }
 
-        // Samsung TSP Fix (*#2663#)
-        binding.btnSamsungCalibrate.setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle("Samsung S23 Ultra TSP Recalibration")
-                .setMessage(
-                    "This will open your phone dialer with *#2663#.\n\n" +
-                    "1. Once the service menu opens, tap 'TSP FW update (General)'.\n" +
-                    "2. Do NOT touch the screen until 'PASS' appears.\n\n" +
-                    "This resets the hardware baseline capacitance across the entire panel."
-                )
-                .setPositiveButton("Open Dialer") { _, _ ->
-                    val intent = Intent(Intent.ACTION_DIAL).apply {
-                        data = Uri.parse("tel:" + Uri.encode("*#2663#"))
-                    }
-                    startActivity(intent)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-
-        // System Settings Link
+        // Accessibility settings
         binding.btnSystemAccessibility.setOnClickListener {
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            startActivity(intent)
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
     }
 
     private fun updateDashboard() {
+        // Update stats
         val buffer = engine.buffer
         binding.tvGhostCount.text = buffer.totalGhostCount.toString()
         binding.tvEchoCount.text = buffer.totalEchoCount.toString()

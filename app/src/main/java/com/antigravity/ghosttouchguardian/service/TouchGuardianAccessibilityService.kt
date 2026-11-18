@@ -5,15 +5,11 @@ import android.content.Intent
 import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 
-/**
- * Deep Accessibility Integration for Samsung Galaxy devices.
- * Integrates directly with Phone Settings -> Accessibility.
- */
 class TouchGuardianAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        // Ensure background guardian service is running
+        // Start service
         val serviceIntent = Intent(this, TouchGuardianService::class.java).apply {
             action = TouchGuardianService.ACTION_START
         }
@@ -25,10 +21,10 @@ class TouchGuardianAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Ultra-lean event handling: do not retain event objects in heap to keep RAM footprint near zero
+        // Event callback
     }
 
     override fun onInterrupt() {
-        // Accessibility service interrupted by system
+        // Interrupted
     }
 }

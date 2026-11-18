@@ -15,7 +15,7 @@
         android:paddingTop="16dp"
         android:paddingBottom="32dp">
 
-        <!-- ═══ 1. APP BAR & HEADER ═══ -->
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -49,7 +49,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="Guardian Active (0% Screen-Off Battery)"
+                    android:text="Guardian Active (Background Protection)"
                     android:textColor="@color/valid_green"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -70,168 +70,12 @@
                 app:strokeColor="@color/card_border" />
         </LinearLayout>
 
-        <!-- ═══ 2. SENSITIVITY PROFILE SELECTOR CARD ═══ -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardBackgroundColor="@color/card_dark"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="0dp"
-            app:strokeColor="@color/card_border"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="GHOST DETECTION PROFILE"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.06" />
-
-                <TextView
-                    android:id="@+id/tvActiveProfileTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Balanced Protection"
-                    android:textColor="@color/accent_cyan"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvActiveProfileSubtitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="Optimal for daily use: suppresses micro-sparks and release echoes"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
-
-                <!-- Profile Choice Buttons Row 1 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnProfileBalanced"
-                        style="@style/Widget.MaterialComponents.Button"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:minHeight="0dp"
-                        android:text="Balanced"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        app:backgroundTint="@color/accent_blue"
-                        app:cornerRadius="10dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnProfileSparks"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="4dp"
-                        android:layout_weight="1"
-                        android:minHeight="0dp"
-                        android:text="Micro-Sparks"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        app:cornerRadius="10dp"
-                        app:strokeColor="@color/card_border" />
-                </LinearLayout>
-
-                <!-- Profile Choice Buttons Row 2 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnProfileEcho"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:minHeight="0dp"
-                        android:text="Trailing Echo"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        app:cornerRadius="10dp"
-                        app:strokeColor="@color/card_border" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnProfileUVGlue"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="4dp"
-                        android:layout_weight="1"
-                        android:minHeight="0dp"
-                        android:text="Heavy UV Glue"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        app:cornerRadius="10dp"
-                        app:strokeColor="@color/card_border" />
-                </LinearLayout>
-
-                <!-- Current physical thresholds strip -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="#0A1220"
-                    android:orientation="horizontal"
-                    android:padding="10dp">
-
-                    <TextView
-                        android:id="@+id/tvMetricDwell"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Dwell: &lt; 35ms"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/tvMetricEcho"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Echo: 55ms"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/tvMetricSize"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Size: &lt; 0.045"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="11sp" />
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- ═══ 3. PRIMARY HERO CARD: OPEN TEST LAB ═══ -->
+        <!-- Primary action -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardOpenLab"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="16dp"
             android:clickable="true"
             android:focusable="true"
             app:cardBackgroundColor="#0D172A"
@@ -249,17 +93,17 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="DIAGNOSTIC TEST LAB"
+                    android:text="GHOST TOUCH TEST ARENA"
                     android:textColor="@color/accent_cyan"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    android:letterSpacing="0.08" />
+                    android:letterSpacing="0.06" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="Ghost Touch Test Arena"
+                    android:text="Full-Screen Ghost Lab"
                     android:textColor="@color/text_primary"
                     android:textSize="18sp"
                     android:textStyle="bold" />
@@ -268,7 +112,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="Interactive testing arena. Screen is locked against phantom clicks. Includes 3 diagnostic modes and personal human tap calibration."
+                    android:text="Locks the display against random clicks. Diagnoses stray electrical sparks and trailing touches. Exit requires human-verified finger slider."
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:lineSpacingExtra="2dp" />
@@ -279,7 +123,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:layout_marginTop="14dp"
-                    android:text="START GHOST TOUCH TEST"
+                    android:text="START GHOST TEST LAB"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     app:backgroundTint="@color/accent_blue"
@@ -287,7 +131,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ═══ 4. LIVE TELEMETRY CARD ═══ -->
+        <!-- Protection level -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -307,7 +151,104 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="LIVE TELEMETRY"
+                    android:text="PROTECTION LEVEL"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06" />
+
+                <TextView
+                    android:id="@+id/tvActiveProfileSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Choose protection intensity for your touchscreen:"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <!-- 3 simple pills -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnProfileGaming"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:text="Light (Gaming)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/card_border" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnProfileBalanced"
+                        style="@style/Widget.MaterialComponents.Button"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:text="Balanced"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/accent_blue"
+                        app:cornerRadius="10dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnProfileAggressive"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:text="High (Damaged)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/card_border" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvMetricSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Filters taps under 35ms and trailing echoes under 55ms"
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Live telemetry -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="@color/card_dark"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/card_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="LIVE SENSOR TELEMETRY"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:textStyle="bold"
@@ -389,7 +330,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="RAM Buffer"
+                            android:text="RAM Usage"
                             android:textColor="@color/text_muted"
                             android:textSize="12sp" />
 
@@ -406,7 +347,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ═══ 5. SAMSUNG TSP FIX CARD ═══ -->
+        <!-- Universal Hardware Calibration -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -424,29 +365,31 @@
                 android:padding="16dp">
 
                 <TextView
+                    android:id="@+id/tvHardwareTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="SAMSUNG HARDWARE CALIBRATION"
+                    android:text="HARDWARE TOUCH CALIBRATION"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/tvHardwareDesc"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
-                    android:text="Direct shortcut to Samsung's secret service menu (*#2663#) to recalibrate capacitive digitizer baseline."
+                    android:text="Recalibrate capacitive digitizer baseline to eliminate phantom touch drift."
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:lineSpacingExtra="2dp" />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSamsungCalibrate"
+                    android:id="@+id/btnHardwareCalibrate"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:layout_marginTop="12dp"
-                    android:text="OPEN *#2663# TSP FIX"
+                    android:text="RECALIBRATE TOUCH SENSORS"
                     android:textColor="@color/accent_cyan"
                     android:textSize="14sp"
                     android:textStyle="bold"
@@ -455,7 +398,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ═══ 6. SYSTEM ACTION BUTTONS ═══ -->
+        <!-- Actions -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

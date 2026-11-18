@@ -19,12 +19,6 @@ import com.antigravity.ghosttouchguardian.engine.TemporalFilter
 import com.antigravity.ghosttouchguardian.engine.TouchProfilerEngine
 import com.antigravity.ghosttouchguardian.ui.MainActivity
 
-/**
- * Persistent, ultra-low memory background service.
- * Keeps running in the background when app is closed to nullify ghost touches system-wide.
- * Memory footprint: ~15-25 KB total.
- * Battery drain when screen is off: 0.00%.
- */
 class TouchGuardianService : Service() {
 
     val temporalFilter = TemporalFilter()
@@ -39,22 +33,25 @@ class TouchGuardianService : Service() {
         instance = this
         prefs = GuardianPreferences(this)
 
-        // Load saved profile & thresholds
+        // Load profile
         val profile = prefs.currentProfile
         profiler.profile = profile
         temporalFilter.applyProfile(profile)
         temporalFilter.isEnabled = prefs.isGuardianEnabled
 
+        // Create channel
         createNotificationChannel()
 
         val notification = buildNotification(temporalFilter.isEnabled)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Foreground service
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
+            // Foreground legacy
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        // Screen On/Off listener for zero battery consumption when display is sleeping
+        // Screen listener
         screenReceiver = ScreenStateReceiver(
             onScreenOn = {
                 isScreenActive = true
@@ -63,7 +60,7 @@ class TouchGuardianService : Service() {
             onScreenOff = {
                 isScreenActive = false
                 temporalFilter.isEnabled = false
-                // Proactively flush temporary state to free memory
+                // Flush buffers
                 profiler.flush()
                 temporalFilter.flush()
             }
@@ -84,6 +81,7 @@ class TouchGuardianService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TOGGLE -> {
+                // Toggle state
                 temporalFilter.isEnabled = !temporalFilter.isEnabled
                 prefs.isGuardianEnabled = temporalFilter.isEnabled
                 val notification = buildNotification(temporalFilter.isEnabled)
@@ -91,6 +89,7 @@ class TouchGuardianService : Service() {
                 manager.notify(NOTIFICATION_ID, notification)
             }
             ACTION_UPDATE_PROFILE -> {
+                // Update profile
                 val profile = prefs.currentProfile
                 profiler.profile = profile
                 temporalFilter.applyProfile(profile)
@@ -99,10 +98,12 @@ class TouchGuardianService : Service() {
                 manager.notify(NOTIFICATION_ID, notification)
             }
             ACTION_FLUSH -> {
+                // Clear state
                 profiler.flush()
                 temporalFilter.flush()
             }
             ACTION_STOP -> {
+                // Stop service
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -114,6 +115,7 @@ class TouchGuardianService : Service() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_RUNNING_LOW || level >= TRIM_MEMORY_BACKGROUND) {
+            // Purge memory
             profiler.flush()
             temporalFilter.flush()
         }

@@ -2,21 +2,16 @@ package com.antigravity.ghosttouchguardian.model
 
 import java.util.Arrays
 
-/**
- * Ultra-compact, zero-allocation circular ring buffer.
- * Memory footprint: ~3.6 Kilobytes total (stored in flat primitive arrays).
- * Avoids any heap allocation or object boxing in the touch loop to eliminate GC pauses.
- */
 class CompactTouchBuffer(val capacity: Int = 128) {
 
-    // Primitive flat arrays (Zero object wrapper overhead)
+    // Primitive arrays
     val xCoords = FloatArray(capacity)
     val yCoords = FloatArray(capacity)
     val timestamps = LongArray(capacity)
-    val dwellTimes = IntArray(capacity)      // in milliseconds
-    val contactSizes = FloatArray(capacity)  // normalized 0.0 - 1.0
-    val pressures = FloatArray(capacity)     // normalized 0.0 - 1.0
-    val eventTypes = ByteArray(capacity)    // 0: Human, 1: Ghost Idle, 2: Ghost Echo, 3: S-Pen
+    val dwellTimes = IntArray(capacity)
+    val contactSizes = FloatArray(capacity)
+    val pressures = FloatArray(capacity)
+    val eventTypes = ByteArray(capacity)
 
     private var head = 0
     var size = 0
@@ -29,10 +24,6 @@ class CompactTouchBuffer(val capacity: Int = 128) {
     var totalEchoCount = 0L
         private set
 
-    /**
-     * Inserts a record using O(1) in-place overwrite.
-     * Absolutely ZERO memory allocation occurs here.
-     */
     @Synchronized
     fun push(
         x: Float,
@@ -43,6 +34,7 @@ class CompactTouchBuffer(val capacity: Int = 128) {
         pressureVal: Float,
         type: Byte
     ) {
+        // In-place insert
         xCoords[head] = x
         yCoords[head] = y
         timestamps[head] = timestamp
@@ -51,11 +43,13 @@ class CompactTouchBuffer(val capacity: Int = 128) {
         pressures[head] = pressureVal
         eventTypes[head] = type
 
+        // Ring wrap
         head = (head + 1) % capacity
         if (size < capacity) {
             size++
         }
 
+        // Increment stats
         when (type) {
             TYPE_GHOST_IDLE -> totalGhostCount++
             TYPE_GHOST_ECHO -> {
@@ -66,12 +60,9 @@ class CompactTouchBuffer(val capacity: Int = 128) {
         }
     }
 
-    /**
-     * Immediate memory flush.
-     * Overwrites arrays to zero and resets all counters.
-     */
     @Synchronized
     fun flush() {
+        // Zero arrays
         Arrays.fill(xCoords, 0f)
         Arrays.fill(yCoords, 0f)
         Arrays.fill(timestamps, 0L)
@@ -80,6 +71,7 @@ class CompactTouchBuffer(val capacity: Int = 128) {
         Arrays.fill(pressures, 0f)
         Arrays.fill(eventTypes, 0.toByte())
 
+        // Reset state
         head = 0
         size = 0
         totalGhostCount = 0L

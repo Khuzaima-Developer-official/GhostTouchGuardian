@@ -10,11 +10,6 @@ import android.view.View
 import com.antigravity.ghosttouchguardian.engine.TouchProfilerEngine
 import com.antigravity.ghosttouchguardian.model.CompactTouchBuffer
 
-/**
- * High-performance, zero-allocation touch canvas view.
- * Renders touch events and ghost indicators with large, prominent labels and background pills.
- * Clamps labels to view boundaries so text never clips off-screen.
- */
 class TouchCanvasView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -23,45 +18,51 @@ class TouchCanvasView @JvmOverloads constructor(
 
     var profiler: TouchProfilerEngine? = null
 
-    // Pre-allocated Paint objects to ensure 0 bytes memory allocation during onDraw
+    // Valid green
     private val humanPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF00E676.toInt() // Valid Green
+        color = 0xFF00E676.toInt()
         style = Paint.Style.STROKE
         strokeWidth = 6f
     }
 
+    // Ghost red
     private val ghostIdlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFFF4B4B.toInt() // Ghost Red
+        color = 0xFFFF4B4B.toInt()
         style = Paint.Style.FILL_AND_STROKE
         strokeWidth = 8f
     }
 
+    // Echo amber
     private val ghostEchoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFFF9100.toInt() // Amber/Orange for Trailing Echo
+        color = 0xFFFF9100.toInt()
         style = Paint.Style.FILL_AND_STROKE
         strokeWidth = 10f
     }
 
+    // Stylus purple
     private val spenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFB388FF.toInt() // Stylus Purple
+        color = 0xFFB388FF.toInt()
         style = Paint.Style.STROKE
         strokeWidth = 6f
     }
 
+    // Label bg
     private val labelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xDD0B101B.toInt()
         style = Paint.Style.FILL
     }
 
+    // Label text
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFF1F5F9.toInt()
-        textSize = 38f
+        textSize = 36f
         isFakeBoldText = true
     }
 
+    // Ready hint
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFF64748B.toInt()
-        textSize = 34f
+        textSize = 32f
         textAlign = Paint.Align.CENTER
         isFakeBoldText = false
     }
@@ -69,6 +70,7 @@ class TouchCanvasView @JvmOverloads constructor(
     private val pillRect = RectF()
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Process touch
         val engine = profiler ?: return super.onTouchEvent(event)
         engine.processTouchEvent(event)
         invalidate()
@@ -82,11 +84,13 @@ class TouchCanvasView @JvmOverloads constructor(
         val count = buffer.size
 
         if (count == 0) {
-            canvas.drawText("CANVAS READY", width / 2f, height / 2f - 24f, hintPaint)
+            // Empty state
+            canvas.drawText("CANVAS READY", width / 2f, height / 2f - 20f, hintPaint)
             canvas.drawText("Touch screen or place phone on table", width / 2f, height / 2f + 24f, hintPaint)
             return
         }
 
+        // Draw events
         val xArr = buffer.xCoords
         val yArr = buffer.yCoords
         val typeArr = buffer.eventTypes
@@ -99,22 +103,19 @@ class TouchCanvasView @JvmOverloads constructor(
             val type = typeArr[i]
             val dwell = dwellArr[i]
             val contactSize = sizeArr[i]
-
-            val radius = 30f + (contactSize * 90f)
+            val radius = 28f + (contactSize * 85f)
 
             when (type) {
                 CompactTouchBuffer.TYPE_GHOST_IDLE -> {
                     canvas.drawCircle(x, y, radius, ghostIdlePaint)
-                    val label = "GHOST ($dwell ms)"
-                    drawPillLabel(canvas, label, x, y, 0xFFFF4B4B.toInt())
+                    drawPillLabel(canvas, "GHOST ($dwell ms)", x, y, 0xFFFF4B4B.toInt())
                 }
                 CompactTouchBuffer.TYPE_GHOST_ECHO -> {
                     canvas.drawCircle(x, y, radius * 1.3f, ghostEchoPaint)
-                    val label = "ECHO ($dwell ms)"
-                    drawPillLabel(canvas, label, x, y, 0xFFFF9100.toInt())
+                    drawPillLabel(canvas, "ECHO ($dwell ms)", x, y, 0xFFFF9100.toInt())
                 }
                 CompactTouchBuffer.TYPE_SPEN -> {
-                    canvas.drawCircle(x, y, 28f, spenPaint)
+                    canvas.drawCircle(x, y, 26f, spenPaint)
                     drawPillLabel(canvas, "S PEN", x, y, 0xFFB388FF.toInt())
                 }
                 else -> {
@@ -125,16 +126,17 @@ class TouchCanvasView @JvmOverloads constructor(
     }
 
     private fun drawPillLabel(canvas: Canvas, text: String, x: Float, y: Float, accentColor: Int) {
+        // Boundary clamp
         val textWidth = textPaint.measureText(text)
-        val pad = 16f
-        var startX = x + 40f
+        val pad = 14f
+        var startX = x + 36f
         if (startX + textWidth + pad > width - 16f) {
-            startX = x - textWidth - 40f - pad
+            startX = x - textWidth - 36f - pad
         }
         if (startX < 16f) startX = 16f
 
-        pillRect.set(startX - pad, y - 36f, startX + textWidth + pad, y + 16f)
-        canvas.drawRoundRect(pillRect, 12f, 12f, labelBgPaint)
+        pillRect.set(startX - pad, y - 32f, startX + textWidth + pad, y + 14f)
+        canvas.drawRoundRect(pillRect, 10f, 10f, labelBgPaint)
         textPaint.color = accentColor
         canvas.drawText(text, startX, y, textPaint)
     }
