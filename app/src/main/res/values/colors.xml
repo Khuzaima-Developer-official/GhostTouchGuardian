@@ -1,0 +1,16 @@
+<resources>
+    <color name="black">#000000</color>
+    <color name="amoled_black">#05070A</color>
+    <color name="card_dark">#10141D</color>
+    <color name="card_border">#1E2638</color>
+    
+    <color name="accent_blue">#3D7EFE</color>
+    <color name="accent_cyan">#00D2FF</color>
+    <color name="ghost_red">#FF4B4B</color>
+    <color name="valid_green">#00E676</color>
+    <color name="spen_purple">#B388FF</color>
+    
+    <color name="text_primary">#F0F4F8</color>
+    <color name="text_secondary">#8E9BAE</color>
+    <color name="text_muted">#4E5D73</color>
+</resources>

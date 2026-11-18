@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Ghost Touch Guardian</string>
+    <string name="tile_name">Touch Guard</string>
+    <string name="accessibility_description">Real-time ghost touch and post-release trailing echo suppressor for Samsung Galaxy S23 Ultra.</string>
+    
+    <string name="status_running">Guardian Active</string>
+    <string name="status_paused">Guardian Paused</string>
+    <string name="channel_name">Ghost Touch Guardian Channel</string>
+    <string name="channel_desc">Active background monitoring and trailing touch protection.</string>
+</resources>
