@@ -28,6 +28,8 @@ android {
             storePassword = "ghostguard123"
             keyAlias = "ghostguard"
             keyPassword = "ghostguard123"
+            enableV1Signing = true
+            enableV2Signing = true
         }
     }
 
