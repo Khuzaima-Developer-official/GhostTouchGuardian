@@ -21,6 +21,19 @@
     <!-- Low latency haptic notification when ghost touch detected -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Android 11+ package visibility for dialer + settings -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.DISPLAY_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.ACCESSIBILITY_SETTINGS" />
+        </intent>
+    </queries>
+
     <application
         android:name=".GuardianApplication"
         android:allowBackup="false"
