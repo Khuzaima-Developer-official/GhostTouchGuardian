@@ -389,4 +389,60 @@ class TouchProfilerEngineTest {
         assertEquals(CompactTouchBuffer.TYPE_GHOST_ECHO, echoResult)
         assertEquals(1L, engine.buffer.totalGhostCount)
     }
+
+    @Test
+    fun testZeroShockwaveEchoPulseInHotspotIsBlocked() {
+        // Echo pulse: 70ms dwell, zero shockwave, zero flesh — in hotspot zone
+        // TYPE 2: Echo/Discharge class (46..110ms, zero shockwave)
+        val hotspot = com.antigravity.ghosttouchguardian.engine.HotspotZone(300f, 300f, 600f, 700f, 5)
+        engine.calibratedHotspots = listOf(hotspot)
+
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 450f, y = 500f, eventTime = 25000L)
+        val result = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            x = 450f, y = 500f,
+            eventTime = 25070L,
+            downTime = 25000L,
+            forcedImpulse = false
+        )
+
+        // Must be blocked as GHOST_HOTSPOT (zero shockwave, in hotspot, dwell 70ms)
+        assertEquals(CompactTouchBuffer.TYPE_GHOST_HOTSPOT, result)
+        assertEquals(1L, engine.buffer.totalGhostCount)
+    }
+
+    @Test
+    fun testZeroShockwaveEchoPulseOutsideHotspotIsHumanFastTap() {
+        // Outside hotspot, zero shockwave, dwell 70ms — engine cannot determine ghost without hotspot/fingerprint
+        // This is correctly classified as human fast tap by engine (HotspotShieldService blocks it via TYPE logic)
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 200f, y = 200f, eventTime = 26000L)
+        val result = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            x = 200f, y = 200f,
+            eventTime = 26070L,
+            downTime = 26000L,
+            forcedImpulse = false
+        )
+
+        // Engine is telemetry-only here; TYPE-based blocking in overlay handles this
+        assertEquals(CompactTouchBuffer.TYPE_HUMAN_FAST_TAP, result)
+    }
+
+    @Test
+    fun testHumanLongPressNeverBlockedAsGhost() {
+        // Any touch held for > 150ms is biologically guaranteed human
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 500f, y = 500f, eventTime = 27000L)
+        val result = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            x = 500f, y = 500f,
+            eventTime = 27200L,
+            downTime = 27000L,
+            forcedImpulse = false
+        )
+
+        // 200ms dwell — human long press invariant must protect this
+        assertEquals(CompactTouchBuffer.TYPE_HUMAN_FINGER, result)
+        assertEquals(1L, engine.buffer.totalHumanCount)
+        assertEquals(0L, engine.buffer.totalGhostCount)
+    }
 }

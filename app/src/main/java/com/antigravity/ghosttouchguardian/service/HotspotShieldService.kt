@@ -26,12 +26,19 @@ import kotlin.math.max
 /**
  * HotspotShieldService — System-Wide Background Ghost Touch Blocker
  *
- * Positions a targeted overlay specifically over the calibrated damaged/glitch zone.
- * - The rest of the screen (90%+) is untouched, with ZERO interference for normal apps.
- * - In the glitch zone:
- *   - Human finger taps (shockwave, flesh size >= 0.035, pressure >= 0.10) unlock pass-through
- *     for 3 seconds so the user can easily tap, double-tap, and type.
- *   - Ghost touches (no shockwave, tiny contact size, zero pressure) are instantly swallowed.
+ * v1.5.3 — TYPE-based blocking (class-level, not point-level):
+ *   Ghost touches are blocked by their PHYSICAL TYPE signature, not just coordinate proximity:
+ *   - TYPE_FAST_SPARK: zero shockwave + dwell <= 45ms (electrical transient)
+ *   - TYPE_ECHO_PULSE: zero shockwave + dwell 46..110ms (dielectric/discharge echo)
+ *   - TYPE_SPEN_BURST: zero shockwave + post-stylus <= 90ms
+ *   - TYPE_WAKE_GUARD: zero shockwave + sub-100ms within 1.5s of screen waking
+ *   Any touch matching a ghost TYPE is blocked anywhere on screen (not just in bounding box).
+ *   Human invariant: dwell > 110ms OR shockwave OR flesh size/pressure = always pass through.
+ *
+ * Screen-off protection:
+ *   On ACTION_SCREEN_ON, TouchGuardianService sends ACTION_SCREEN_WAKE_GUARD.
+ *   For 1500ms after screen wake, any zero-shockwave sub-100ms touch is blocked globally —
+ *   these are ghost screen-wake bursts from the damaged digitizer.
  */
 class HotspotShieldService : Service() {
 
@@ -47,21 +54,19 @@ class HotspotShieldService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var isTouchThrough = false
 
+    // Screen-wake ghost burst guard: active for 1500ms after screen turns on
+    @Volatile private var isScreenWakeGuardActive = false
+    private val screenWakeGuardOff = Runnable { isScreenWakeGuardActive = false }
+
     private val reArmRunnable: Runnable = object : Runnable {
         override fun run() {
-            // Human Handling & Micro-Motion Verification:
-            // While a user holds their finger down (long-press, drag, voice note, game control),
-            // the hand and finger induce continuous micro-tremors (> 0.009 m/s²).
-            // Only re-arm when the phone has been completely undisturbed/still.
             val now = android.os.SystemClock.uptimeMillis()
             val hasRecentMotion = impulseSensor.hasMechanicalImpulse(now, windowMs = 1500L)
             val accelDelta = impulseSensor.getLastAccelDelta()
 
             if (hasRecentMotion || accelDelta >= 0.009f) {
-                // User is still actively holding or touching the device — postpone re-arm!
                 handler.postDelayed(this, 2000L)
             } else {
-                // Phone is still and undisturbed — safe to re-arm shield without dropping human touches
                 reArmShield()
             }
         }
@@ -84,9 +89,7 @@ class HotspotShieldService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 refreshZones()
-                if (checkOverlayPermission()) {
-                    attachOverlay()
-                }
+                if (checkOverlayPermission()) attachOverlay()
             }
             ACTION_STOP -> {
                 removeOverlay()
@@ -97,16 +100,18 @@ class HotspotShieldService : Service() {
             }
             ACTION_RESUME -> {
                 refreshZones()
-                if (checkOverlayPermission()) {
-                    attachOverlay()
-                }
+                if (checkOverlayPermission()) attachOverlay()
             }
             ACTION_REFRESH_ZONES -> {
                 refreshZones()
                 removeOverlay()
-                if (checkOverlayPermission()) {
-                    attachOverlay()
-                }
+                if (checkOverlayPermission()) attachOverlay()
+            }
+            ACTION_SCREEN_WAKE_GUARD -> {
+                // Screen just turned on — activate 1500ms ghost-burst suppressor
+                isScreenWakeGuardActive = true
+                handler.removeCallbacks(screenWakeGuardOff)
+                handler.postDelayed(screenWakeGuardOff, 1500L)
             }
         }
         return START_STICKY
@@ -126,7 +131,6 @@ class HotspotShieldService : Service() {
     private fun attachOverlay() {
         if (overlayView != null) return
 
-        // Calculate targeted bounding box of the glitch region
         var boxLeft = 0
         var boxTop = 0
         var boxWidth = 0
@@ -181,17 +185,12 @@ class HotspotShieldService : Service() {
 
     private fun passThroughTemporarily() {
         isTouchThrough = true
-
         overlayParams?.let { p ->
             p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             try {
                 overlayView?.let { windowManager.updateViewLayout(it, p) }
             } catch (_: Exception) {}
         }
-
-        // Generous 4-second baseline unlock window:
-        // Allows human long-presses (500-2500ms), drag-and-drop, typing, and holds to complete naturally.
-        // reArmRunnable will verify the phone is completely undisturbed before re-arming so ongoing holds are NEVER severed!
         handler.removeCallbacks(reArmRunnable)
         handler.postDelayed(reArmRunnable, 4000L)
     }
@@ -209,9 +208,7 @@ class HotspotShieldService : Service() {
     private fun removeOverlay() {
         handler.removeCallbacks(reArmRunnable)
         overlayView?.let {
-            try {
-                windowManager.removeView(it)
-            } catch (_: Exception) {}
+            try { windowManager.removeView(it) } catch (_: Exception) {}
         }
         overlayView = null
         overlayParams = null
@@ -226,28 +223,27 @@ class HotspotShieldService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // Glitch zone overlay view
+    // ---------------------------------------------------------------------------
+    // Overlay view — ghost TYPE detection logic lives here
+    // ---------------------------------------------------------------------------
     private inner class HotspotOverlayView(context: Context) : View(context) {
 
         private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(25, 255, 23, 68) // Subtle translucent shield
+            color = Color.argb(25, 255, 23, 68)
             style = Paint.Style.FILL
         }
-
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(80, 255, 23, 68)
             style = Paint.Style.STROKE
             strokeWidth = 2f
         }
 
-        // State for deferred ghost classification (ACTION_DOWN -> ACTION_UP pipeline)
+        // Deferred classification state (DOWN→UP pipeline)
         private var pendingDownTime: Long = 0L
-        private var pendingDownSize: Float = 0f
-        private var pendingDownPressure: Float = 0f
         private var pendingDownShockwave: Boolean = false
         private var pendingIsHuman: Boolean = false
 
-        // Post-Stylus electrostatic burst tracking
+        // Post-stylus burst tracking
         private var lastStylusUpTime: Long = 0L
 
         override fun onDraw(canvas: Canvas) {
@@ -260,7 +256,7 @@ class HotspotShieldService : Service() {
         override fun onTouchEvent(event: MotionEvent): Boolean {
             if (isTouchThrough) return false
 
-            // S Pen Bypass & Post-Stylus Burst Tracking
+            // S Pen always passes through — track stylus lift for post-stylus echo window
             if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS) {
                 if (event.actionMasked == MotionEvent.ACTION_UP) {
                     lastStylusUpTime = event.eventTime
@@ -270,32 +266,24 @@ class HotspotShieldService : Service() {
             }
 
             when (event.actionMasked) {
+
                 MotionEvent.ACTION_DOWN -> {
-                    // Classify at DOWN only for quick human unlock — but ALWAYS pass through DOWN
-                    // so the underlying app sees ACTION_DOWN and scrolls work normally.
                     pendingDownTime = event.eventTime
-                    pendingDownSize = event.size
-                    pendingDownPressure = event.pressure
                     pendingDownShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 80L)
                     pendingIsHuman = pendingDownShockwave ||
                             event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
 
-                    if (pendingIsHuman) {
-                        // Real finger confirmed at DOWN — unlock immediately
-                        passThroughTemporarily()
-                    }
-                    // ALWAYS return false on ACTION_DOWN so scroll gestures start normally
+                    if (pendingIsHuman) passThroughTemporarily()
+                    // Always pass ACTION_DOWN through — scroll gestures need it
                     return false
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    // Finger is actively moving / scrolling / dragging — refresh the pass-through window
                     if (isTouchThrough) {
                         handler.removeCallbacks(reArmRunnable)
                         handler.postDelayed(reArmRunnable, 4000L)
                     }
-
-                    // Check again on MOVE in case shockwave arrives late (device vibration propagation delay)
+                    // Late-arriving shockwave (vibration propagation delay)
                     if (!pendingIsHuman) {
                         val nowShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 100L)
                         if (nowShockwave) {
@@ -309,19 +297,49 @@ class HotspotShieldService : Service() {
                 MotionEvent.ACTION_UP -> {
                     val dwell = (event.eventTime - pendingDownTime).toInt()
 
-                    // Final shockwave check at ACTION_UP window too
+                    // Consolidate all shockwave evidence across the entire touch lifecycle
                     val finalShockwave = pendingDownShockwave ||
                             impulseSensor.hasMechanicalImpulse(pendingDownTime, windowMs = 120L)
 
-                    // Final fleshy check — also include UP event's fresh size/pressure reading
+                    // Fleshy contact markers at ACTION_UP (fresh reading)
                     val finalIsHuman = pendingIsHuman || finalShockwave ||
                             event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
 
-                    // Check S Pen electrostatic discharge burst (zero shockwave, within 1.5s of stylus lift)
-                    val timeSinceStylus = if (lastStylusUpTime > 0L) pendingDownTime - lastStylusUpTime else -1L
-                    val isPostStylusEcho = timeSinceStylus in 2L..1500L
+                    // ----------------------------------------------------------------
+                    // HUMAN INVARIANT — always pass through, no matter the zone:
+                    // - Any touch held > 110ms is biological (electrical sparks die ≤ 110ms)
+                    // - Any touch with shockwave or flesh contact is biological
+                    // ----------------------------------------------------------------
+                    if (dwell > DWELL_ECHO_MAX || finalIsHuman) {
+                        if (!isTouchThrough) passThroughTemporarily()
+                        return false
+                    }
 
-                    if (isPostStylusEcho && !finalShockwave && dwell <= 90) {
+                    // ----------------------------------------------------------------
+                    // GHOST TYPE CLASSIFICATION — zero shockwave + zero flesh contact
+                    // Block the entire TYPE — not just specific coordinates.
+                    // Physical basis: ghost capacitive noise has TYPE-invariant signatures
+                    // that apply across the ENTIRE damaged area, not just one point.
+                    // ----------------------------------------------------------------
+
+                    // TYPE 3 — S Pen Electrostatic Burst (highest priority: S Pen specific)
+                    val timeSinceStylus = if (lastStylusUpTime > 0L) pendingDownTime - lastStylusUpTime else -1L
+                    val isSPenEchoType = timeSinceStylus in 2L..SPEN_ECHO_WINDOW_MS && dwell <= SPEN_ECHO_DWELL_MAX
+
+                    // TYPE 4 — Screen-Wake Ghost Burst (screen just turned on, digitizer firing)
+                    val isWakeGuardType = isScreenWakeGuardActive && dwell <= WAKE_GUARD_DWELL_MAX
+
+                    // TYPE 1 — Fast Electrical Spark (sub-45ms transient)
+                    val isFastSparkType = dwell <= DWELL_SPARK_MAX
+
+                    // TYPE 2 — Echo/Discharge Pulse (46..110ms, any location, zero shockwave)
+                    // Note: dwell > DWELL_ECHO_MAX already passed through above
+                    val isEchoPulseType = dwell in (DWELL_SPARK_MAX + 1)..DWELL_ECHO_MAX
+
+                    // Block if ANY ghost TYPE matches — location is irrelevant
+                    val isGhostType = isSPenEchoType || isWakeGuardType || isFastSparkType || isEchoPulseType
+
+                    if (isGhostType) {
                         prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
                         val cancelEvent = MotionEvent.obtain(event).also {
                             it.action = MotionEvent.ACTION_CANCEL
@@ -330,28 +348,11 @@ class HotspotShieldService : Service() {
                             super.onTouchEvent(cancelEvent)
                         } catch (_: Exception) {}
                         cancelEvent.recycle()
-                        return true
+                        return true // Ghost TYPE swallowed
                     }
 
-                    // Long-Press / Human Hold Invariant:
-                    // Any touch held continuously for > 110ms is guaranteed human intent (hold/press/drag).
-                    // Transient electrical glitch noise sparks ALWAYS die within <= 45ms (max 110ms).
-                    if (dwell > 110 || finalIsHuman) {
-                        // Human confirmed — ensure pass-through is active, let UP through smoothly
-                        if (!isTouchThrough) passThroughTemporarily()
-                        return false
-                    }
-
-                    // Ghost confirmed: zero shockwave + dwell <= 110ms + zero flesh contact -> SWALLOW IT!
-                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    val cancelEvent = MotionEvent.obtain(event).also {
-                        it.action = MotionEvent.ACTION_CANCEL
-                    }
-                    try {
-                        super.onTouchEvent(cancelEvent)
-                    } catch (_: Exception) {}
-                    cancelEvent.recycle()
-                    return true // Swallow the ghost ACTION_UP
+                    // Should not reach here (covered by human invariant above), but be safe
+                    return false
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
@@ -370,5 +371,17 @@ class HotspotShieldService : Service() {
         const val ACTION_REFRESH_ZONES = "com.antigravity.guardian.SHIELD_REFRESH"
         const val ACTION_PAUSE = "com.antigravity.guardian.SHIELD_PAUSE"
         const val ACTION_RESUME = "com.antigravity.guardian.SHIELD_RESUME"
+        const val ACTION_SCREEN_WAKE_GUARD = "com.antigravity.guardian.SHIELD_WAKE_GUARD"
+
+        // Ghost TYPE thresholds (physical basis for capacitive noise classification)
+        // TYPE 1 — Fast Electrical Spark: capacitive transient, always dies < 45ms
+        const val DWELL_SPARK_MAX = 45
+        // TYPE 2 — Echo/Discharge Pulse: dielectric echo or S Pen static, 46..110ms
+        const val DWELL_ECHO_MAX = 110
+        // TYPE 3 — S Pen post-stylus burst: electrostatic discharge up to 1500ms after lift
+        const val SPEN_ECHO_WINDOW_MS = 1500L
+        const val SPEN_ECHO_DWELL_MAX = 90
+        // TYPE 4 — Screen-wake ghost burst: damaged digitizer fires when screen wakes
+        const val WAKE_GUARD_DWELL_MAX = 100
     }
 }

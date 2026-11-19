@@ -77,6 +77,12 @@ class TouchGuardianService : Service() {
                 isScreenActive = true
                 temporalFilter.isEnabled = prefs.isGuardianEnabled
                 impulseSensor?.start()
+                // Notify HotspotShieldService: screen just woke — activate 1500ms ghost-burst guard
+                // Damaged digitizer fires ghost touches when screen turns on (wake burst)
+                val wakeGuardIntent = Intent(this@TouchGuardianService, HotspotShieldService::class.java).apply {
+                    action = HotspotShieldService.ACTION_SCREEN_WAKE_GUARD
+                }
+                try { startService(wakeGuardIntent) } catch (_: Exception) {}
             },
             onScreenOff = {
                 isScreenActive = false
