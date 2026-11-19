@@ -488,6 +488,19 @@
                     android:layout_marginBottom="2dp"
                     android:background="@color/card_border" />
 
+                <!-- Testing Mode Alerts Toggle -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnToggleTestingAlerts"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Testing Haptics: OFF (Silent)"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/card_border" />
+
                 <!-- flush -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnFlushMemory"

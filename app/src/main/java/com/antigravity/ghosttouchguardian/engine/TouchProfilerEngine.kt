@@ -26,9 +26,6 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     private var lastDownTime: Long = 0L
     private var downX: Float = 0f
     private var downY: Float = 0f
-    private var downPressure: Float = 0f
-    private var downTouchMajor: Float = 0f
-    private var downSize: Float = 0f
 
     // Teleportation tracking
     private var lastAnyEventTime: Long = 0L
@@ -56,18 +53,15 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 lastDownTime = event.eventTime
                 downX = event.x
                 downY = event.y
-                downPressure = event.pressure
-                downSize = event.size
-                downTouchMajor = try { event.touchMajor } catch (_: Exception) { 0f }
 
                 // Check impossible teleportation (EMI charger noise)
                 if (lastAnyEventTime > 0L) {
                     val dt = event.eventTime - lastAnyEventTime
-                    if (dt in 1L..7L && lastAnyEventX >= 0f) {
+                    if (dt in 1L..6L && lastAnyEventX >= 0f) {
                         val dx = event.x - lastAnyEventX
                         val dy = event.y - lastAnyEventY
                         val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-                        // Impossible jump (>350px in <8ms)
+                        // Impossible jump (>350px in <6ms without swipe)
                         if (dist > 350f) {
                             onAnomalyDetected?.invoke(
                                 CompactTouchBuffer.TYPE_GHOST_TELEPORT,
@@ -88,7 +82,6 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 val touchSize = event.size
                 val pressure = event.pressure
                 val touchMajor = try { event.touchMajor } catch (_: Exception) { 0f }
-                val touchMinor = try { event.touchMinor } catch (_: Exception) { 0f }
 
                 // Micro displacement
                 val dx = event.x - downX
@@ -106,29 +99,25 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 lastAnyEventY = event.y
 
                 // -----------------------------------------------------------------
-                // MULTI-FACTOR EVALUATION: NEVER RELY ON DWELL TIME ALONE
+                // SYSTEM-BASED PHYSICAL INVARIANT CLASSIFICATION:
+                // Rule 1: Human-First Default. Any intentional touch (feather-light,
+                //         soft click on tiny 'X' button, or fast tap) is 100% HUMAN!
+                // Rule 2: An anomaly is ONLY flagged under strict physical failure invariants:
+                //         - Hands-Free Scan (phone is resting, user is not touching)
+                //         - True Dielectric Rebound Echo (strictly 2-15ms post-liftoff at the exact same spot <= 30px with dwell <= 12ms)
+                //         - Zero-Physics Spark (pure 0-sample glitch)
                 // -----------------------------------------------------------------
 
-                // Biological Indicators:
-                // 1. Physical pressure (>0.04f): Hand/finger clicks exert real physical force
-                // 2. Contact ellipse (touchMajor >= 10f): Flesh flattens into an ellipse
-                // 3. Contact size (>0.015f): Detectable capacitive area
-                val hasBiologicalPressure = pressure >= 0.04f || downPressure >= 0.04f
-                val hasBiologicalEllipse = touchMajor >= 10f || touchMinor >= 6f || downTouchMajor >= 10f
-                val hasBiologicalSize = touchSize >= 0.015f || downSize >= 0.015f
-                val isDefiniteHumanFinger = hasBiologicalPressure || hasBiologicalEllipse || hasBiologicalSize
-
-                // Dielectric Echo: Occurs strictly within 2-18ms of release at the same locus with NO biological footprint
-                val isDielectricEcho = deltaSinceLastUp in 2L..18L &&
-                        distFromLastUp <= 35f &&
-                        !isDefiniteHumanFinger &&
-                        dwell < 18
-
-                // Hands-Free Scan: User placed phone on table, any touch is authentic ghost
                 val isHandsFreeGhost = isHandsFreeScanActive
 
-                // Zero-physics electrical spark
-                val isZeroPhysicsSpark = dwell < 10 &&
+                // True Dielectric Echo: Occurs strictly within 2-15ms after finger release at the exact same locus
+                val isDielectricEcho = lastHumanUpTime > 0L &&
+                        deltaSinceLastUp in 2L..15L &&
+                        distFromLastUp <= 30f &&
+                        dwell <= 12
+
+                // Zero-physics electrical glitch: Completely 0 down to floating point across all dimensions
+                val isZeroPhysicsSpark = dwell <= 5 &&
                         displacement == 0f &&
                         pressure == 0f &&
                         touchSize == 0f &&
@@ -148,10 +137,10 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                     }
                     isZeroPhysicsSpark -> {
                         type = CompactTouchBuffer.TYPE_GHOST_IDLE
-                        factorReason = "Zero-Area Spark ($dwell ms)"
+                        factorReason = "Zero-Area Glitch ($dwell ms)"
                     }
                     dwell < 75 -> {
-                        // Any click from 10ms to 75ms (fast or hard click) is 100% human!
+                        // Fast, light, or hard taps (e.g. 10ms - 75ms) are 100% human!
                         type = CompactTouchBuffer.TYPE_HUMAN_FAST_TAP
                         factorReason = "Human Fast Click ($dwell ms)"
                         lastHumanUpTime = event.eventTime
@@ -159,6 +148,7 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                         lastHumanUpY = event.y
                     }
                     else -> {
+                        // Normal, soft, smooth touches (e.g. soft click on tiny 'x' button)
                         type = CompactTouchBuffer.TYPE_HUMAN_FINGER
                         factorReason = "Human Touch ($dwell ms)"
                         lastHumanUpTime = event.eventTime

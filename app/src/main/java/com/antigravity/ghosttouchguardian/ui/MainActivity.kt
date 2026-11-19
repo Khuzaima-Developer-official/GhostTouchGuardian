@@ -216,6 +216,15 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        // Testing alerts toggle
+        updateTestingAlertsButton()
+        binding.btnToggleTestingAlerts.setOnClickListener {
+            prefs.isTestingAlertsEnabled = !prefs.isTestingAlertsEnabled
+            updateTestingAlertsButton()
+            val msg = if (prefs.isTestingAlertsEnabled) "Testing Haptics: ON (Buzz on ghost touch)" else "Testing Haptics: OFF (Silent)"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
         // Flush buffer
         binding.btnFlushMemory.setOnClickListener {
             engine.flush()
@@ -224,6 +233,18 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Memory Purged (0 B active)", Toast.LENGTH_SHORT).show()
         }
 
+    }
+
+    private fun updateTestingAlertsButton() {
+        if (prefs.isTestingAlertsEnabled) {
+            binding.btnToggleTestingAlerts.text = "Testing Haptics: ON (Buzz Active)"
+            binding.btnToggleTestingAlerts.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+            binding.btnToggleTestingAlerts.strokeColor = ContextCompat.getColorStateList(this, R.color.accent_cyan)
+        } else {
+            binding.btnToggleTestingAlerts.text = "Testing Haptics: OFF (Silent)"
+            binding.btnToggleTestingAlerts.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.btnToggleTestingAlerts.strokeColor = ContextCompat.getColorStateList(this, R.color.card_border)
+        }
     }
 
     private fun updateDashboard() {

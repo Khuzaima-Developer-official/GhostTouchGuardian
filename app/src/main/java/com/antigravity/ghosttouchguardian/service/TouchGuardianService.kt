@@ -124,12 +124,12 @@ class TouchGuardianService : Service() {
         prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
         lastAnomalySummary = "$reason at (${x.toInt()}, ${y.toInt()})"
 
-        // Trigger micro-haptic buzz
-        triggerHapticAlert()
-
-        // Update notification
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, buildNotification(temporalFilter.isEnabled))
+        // Only trigger haptic buzz & alert notification if Testing Mode is active
+        if (prefs.isTestingAlertsEnabled) {
+            triggerHapticAlert()
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildNotification(temporalFilter.isEnabled))
+        }
     }
 
     private fun triggerHapticAlert() {

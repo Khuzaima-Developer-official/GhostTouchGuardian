@@ -32,11 +32,16 @@ class GuardianPreferences(context: Context) {
         get() = prefs.getLong(KEY_BLOCKED_ECHOES, 0L)
         set(value) = prefs.edit().putLong(KEY_BLOCKED_ECHOES, value).apply()
 
+    var isTestingAlertsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TESTING_ALERTS_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_TESTING_ALERTS_ENABLED, value).apply()
+
     companion object {
         private const val PREF_NAME = "ghost_touch_guardian_prefs"
         private const val KEY_PROFILE_ID = "pref_profile_id"
         private const val KEY_GUARDIAN_ENABLED = "pref_guardian_enabled"
         private const val KEY_BLOCKED_GHOSTS = "pref_blocked_ghosts"
         private const val KEY_BLOCKED_ECHOES = "pref_blocked_echoes"
+        private const val KEY_TESTING_ALERTS_ENABLED = "pref_testing_alerts_enabled"
     }
 }
