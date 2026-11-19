@@ -56,7 +56,7 @@ class CompactTouchBuffer(val capacity: Int = 128) {
                 totalGhostCount++
                 totalEchoCount++
             }
-            TYPE_HUMAN_FINGER -> totalHumanCount++
+            TYPE_HUMAN_FINGER, TYPE_HUMAN_FAST_TAP -> totalHumanCount++
         }
     }
 
@@ -84,5 +84,6 @@ class CompactTouchBuffer(val capacity: Int = 128) {
         const val TYPE_GHOST_IDLE: Byte = 1
         const val TYPE_GHOST_ECHO: Byte = 2
         const val TYPE_SPEN: Byte = 3
+        const val TYPE_HUMAN_FAST_TAP: Byte = 4
     }
 }

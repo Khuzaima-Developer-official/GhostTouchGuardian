@@ -118,6 +118,10 @@ class TouchCanvasView @JvmOverloads constructor(
                     canvas.drawCircle(x, y, 26f, spenPaint)
                     drawPillLabel(canvas, "S PEN", x, y, 0xFFB388FF.toInt())
                 }
+                CompactTouchBuffer.TYPE_HUMAN_FAST_TAP -> {
+                    canvas.drawCircle(x, y, radius, humanPaint)
+                    drawPillLabel(canvas, "FAST TAP ($dwell ms)", x, y, 0xFF00E676.toInt())
+                }
                 else -> {
                     canvas.drawCircle(x, y, radius, humanPaint)
                 }

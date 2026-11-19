@@ -22,6 +22,9 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     var jitterThreshold: Float = GhostTouchProfile.BALANCED.jitterThresholdPx
 
     private var lastHumanUpTime: Long = 0L
+    private var lastHumanUpX: Float = -1f
+    private var lastHumanUpY: Float = -1f
+
     private var lastDownTime: Long = 0L
     private var downX: Float = 0f
     private var downY: Float = 0f
@@ -59,9 +62,14 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 downY = event.y
 
                 val deltaSinceLastUp = if (lastHumanUpTime > 0) event.eventTime - lastHumanUpTime else 9999L
+                val dist = if (lastHumanUpX >= 0f) {
+                    val dx = event.x - lastHumanUpX
+                    val dy = event.y - lastHumanUpY
+                    sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                } else 9999f
 
                 // Echo check
-                if (deltaSinceLastUp in 2L..echoWindowMaxMs) {
+                if (deltaSinceLastUp in 2L..echoWindowMaxMs && dist <= 45f && event.size < 0.05f) {
                     onAnomalyDetected?.invoke(
                         CompactTouchBuffer.TYPE_GHOST_ECHO,
                         event.x, event.y, deltaSinceLastUp.toInt()
@@ -75,24 +83,46 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 val touchSize = event.size
                 val pressure = event.pressure
 
-                // Calculate displacement
+                // Micro displacement
                 val dx = event.x - downX
                 val dy = event.y - downY
                 val displacement = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
 
+                val distFromLastUp = if (lastHumanUpX >= 0f) {
+                    val ex = event.x - lastHumanUpX
+                    val ey = event.y - lastHumanUpY
+                    sqrt((ex * ex + ey * ey).toDouble()).toFloat()
+                } else 9999f
+
+                // Fast gaming tap
+                val isBiologicalTouch = touchSize >= 0.06f || displacement >= 1.2f
+
                 // Classify touch
                 val type: Byte = when {
-                    deltaSinceLastUp in 2L..echoWindowMaxMs -> {
+                    // Residual echo
+                    deltaSinceLastUp in 2L..echoWindowMaxMs && distFromLastUp <= 45f && touchSize < 0.05f -> {
                         CompactTouchBuffer.TYPE_GHOST_ECHO
                     }
-                    isIdleMonitoringActive && (dwell in 0..ghostMaxDwellMs) -> {
+                    // Hands free lab
+                    isIdleMonitoringActive && !isBiologicalTouch && dwell <= ghostMaxDwellMs -> {
                         CompactTouchBuffer.TYPE_GHOST_IDLE
                     }
-                    (dwell in 0..ghostMaxDwellMs) || (touchSize < ghostMaxSize && displacement < jitterThreshold) -> {
+                    // Micro spark
+                    dwell <= ghostMaxDwellMs && touchSize < ghostMaxSize && displacement < jitterThreshold -> {
                         CompactTouchBuffer.TYPE_GHOST_IDLE
                     }
+                    // Fast human tap
+                    isBiologicalTouch && dwell < 60 -> {
+                        lastHumanUpTime = event.eventTime
+                        lastHumanUpX = event.x
+                        lastHumanUpY = event.y
+                        CompactTouchBuffer.TYPE_HUMAN_FAST_TAP
+                    }
+                    // Normal human touch
                     else -> {
                         lastHumanUpTime = event.eventTime
+                        lastHumanUpX = event.x
+                        lastHumanUpY = event.y
                         CompactTouchBuffer.TYPE_HUMAN_FINGER
                     }
                 }
@@ -116,6 +146,8 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
         // Zero state
         buffer.flush()
         lastHumanUpTime = 0L
+        lastHumanUpX = -1f
+        lastHumanUpY = -1f
         lastDownTime = 0L
     }
 }

@@ -79,4 +79,40 @@ class TemporalFilterTest {
 
         assertFalse("Disabled filter must allow all touches", shouldSuppress)
     }
+
+    @Test
+    fun testBiologicalFastTapIsNeverSuppressed() {
+        filter.registerValidFingerRelease(1000L, 200f, 200f)
+
+        // Fast biological finger tap arrives 20ms later with size=0.08
+        val fastTapTime = 1020L
+        val shouldSuppress = filter.shouldSuppressTouch(
+            eventTime = fastTapTime,
+            isDown = true,
+            isStylus = false,
+            x = 200f,
+            y = 200f,
+            touchSize = 0.08f // Biological human finger pulp!
+        )
+
+        assertFalse("Fast biological human tap must NEVER be suppressed", shouldSuppress)
+    }
+
+    @Test
+    fun testDifferentLocationTapIsNeverSuppressed() {
+        filter.registerValidFingerRelease(1000L, 100f, 100f)
+
+        // Rapid tap on another button (e.g. typing or gaming) 20ms later at x=300, y=100
+        val nextKeyTime = 1020L
+        val shouldSuppress = filter.shouldSuppressTouch(
+            eventTime = nextKeyTime,
+            isDown = true,
+            isStylus = false,
+            x = 300f,
+            y = 100f,
+            touchSize = 0.03f
+        )
+
+        assertFalse("Rapid tap on different button (>45px away) must NEVER be suppressed", shouldSuppress)
+    }
 }
