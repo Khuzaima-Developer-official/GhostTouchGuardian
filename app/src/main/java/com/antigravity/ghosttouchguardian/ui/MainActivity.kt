@@ -224,10 +224,6 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Memory Purged (0 B active)", Toast.LENGTH_SHORT).show()
         }
 
-        // Accessibility settings
-        binding.btnSystemAccessibility.setOnClickListener {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
     }
 
     private fun updateDashboard() {

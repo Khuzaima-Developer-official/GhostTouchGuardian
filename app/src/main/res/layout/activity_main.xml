@@ -403,20 +403,6 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:id="@+id/tvStatusAccessibility"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/badge_blue"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp"
-                        android:text="Accessibility"
-                        android:textColor="#FFFFFF"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <TextView
@@ -501,19 +487,6 @@
                     android:layout_marginTop="14dp"
                     android:layout_marginBottom="2dp"
                     android:background="@color/card_border" />
-
-                <!-- accessibility -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSystemAccessibility"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="12dp"
-                    android:text="Accessibility &amp; Boot Settings"
-                    android:textColor="@color/text_primary"
-                    android:textSize="13sp"
-                    app:cornerRadius="12dp"
-                    app:strokeColor="@color/card_border" />
 
                 <!-- flush -->
                 <com.google.android.material.button.MaterialButton
