@@ -6,8 +6,7 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * A single recorded ghost touch sample with all 12-factor dimensions.
- * Captured during Identify Mode where phantom touches are profiled.
+ * A recorded ghost touch sample with core physical dimensions.
  */
 data class GhostTouchEntry(
     val x: Float,
@@ -17,17 +16,17 @@ data class GhostTouchEntry(
     val pressure: Float,
     val touchMajor: Float,
     val historySize: Int,
-    val accelDelta: Float,        // Accelerometer delta magnitude at touch time (0 = no shockwave)
+    val accelDelta: Float,        // Accelerometer delta magnitude (0 = zero momentum)
     val intervalFromPrevMs: Long, // ms since previous touch
     val displacementPx: Float,    // px distance from previous touch
     val timestamp: Long,
     val timeSinceFingerMs: Long = -1L, // ms since human finger tap stimulus
     val velocityPxPerMs: Float = if (intervalFromPrevMs > 0) displacementPx / intervalFromPrevMs else 0f,
-    val factorNotes: String = ""  // e.g. "postFingerGlitch(120ms), spark, noShockwave"
+    val factorNotes: String = ""
 )
 
 /**
- * A custom block rule manually configured or derived from a specific screen zone.
+ * Custom block rule.
  */
 data class CustomBlockRule(
     val description: String,
@@ -43,47 +42,44 @@ data class CustomBlockRule(
 }
 
 /**
- * Statistical 12-Factor Ghost Fingerprint model.
- * Profiles device-specific electrical glitch signatures for precision blocking.
+ * Core-Factor Ghost Fingerprint Model.
+ * Focused on the 4 definitive physical invariants:
+ * 1. Newtonian Momentum (Shockwave absence)
+ * 2. Glitch Zone Centroid (Spatial damage region)
+ * 3. Dwell Duration (Electrical transient vs human intent)
+ * 4. Post-Finger Trailing Echo Window
  */
 data class GhostFingerprint(
     val entries: List<GhostTouchEntry>,
-    // Factor 1: Spatial Centroid & Variance
+    // Core 1: Spatial Glitch Zone
     val avgX: Float,
     val avgY: Float,
     val xStdDev: Float,
     val yStdDev: Float,
-    // Factor 2: Dwell Time Envelope
+    // Core 2: Pulse Dwell Envelope
     val avgDwell: Float,
     val dwellStdDev: Float,
-    // Factor 3: Contact Surface Patch
+    // Core 3: Physical Contact & Momentum
     val avgSize: Float,
     val sizeStdDev: Float,
-    // Factor 4: Contact Force Gradient
     val avgPressure: Float,
-    // Factor 5: Physical Momentum (Accelerometer Delta)
     val avgAccelDelta: Float,
-    // Factor 6: Digitizer Historical Vector Depth
     val avgHistorySize: Float,
-    // Factor 7: Hardware Clock Periodicity
+    // Core 4: Periodicity & Trailing Echo
     val avgPeriodMs: Long,
     val periodVariance: Float,
-    // Factor 8: Post-Finger Trailing Echo Delay
     val avgPostFingerDelayMs: Long,
     val postFingerEchoCount: Int,
-    // Factor 9: Touch Major Axis
     val avgTouchMajor: Float,
-    // Factor 10: Kinematic Velocity Jump Limit
     val maxVelocity: Float,
-    // User Rules
     val customBlockRules: List<CustomBlockRule>
 ) {
     val isValid: Boolean get() = entries.size >= 3
 
     /**
-     * Comprehensive 12-Factor Matching Algorithm.
-     * Evaluates incoming touch across physical, biological, and temporal dimensions.
-     * Returns a [0..1] probability score. Score >= 0.55 confirms a ghost match.
+     * Precision Core-Factor Matching.
+     * Evaluates the definitive physical invariants without bloated/diluted scores.
+     * Returns a [0..1] score. Score >= 0.50 confirms a ghost match.
      */
     fun matchScore(
         x: Float,
@@ -97,58 +93,38 @@ data class GhostFingerprint(
         intervalFromPrevMs: Long = -1L
     ): Float {
         if (!isValid) return 0f
-        var score = 0f
-        var total = 0f
 
-        // Factor 1: Newtonian Momentum (absent in capacitive noise)
-        total += 2.0f
-        if (accelDelta < 0.04f) score += 2.0f
-        else if (accelDelta < 0.08f) score += 1.0f
+        // Hard Invariant: If strong physical shockwave present, it is NEVER a ghost!
+        if (accelDelta >= 0.035f) return 0f
 
-        // Factor 2: Biological Contact Flesh Patch (ghosts are sub-flesh)
-        total += 1.5f
-        val sizeMax = (avgSize + sizeStdDev * 2.5f).coerceAtLeast(0.035f)
-        if (size <= sizeMax) score += 1.5f
+        var ghostSignals = 0
+        var totalChecks = 0
 
-        // Factor 3: Contact Pressure (ghosts have near-zero physical force)
-        total += 1.5f
-        if (pressure <= 0.12f) score += 1.5f
-        else if (pressure <= 0.20f) score += 0.5f
+        // Core Invariant 1: Zero Shockwave (Electrical noise transfers 0 momentum)
+        totalChecks++
+        if (accelDelta < 0.018f) ghostSignals++
 
-        // Factor 4: Dwell Time distribution
-        total += 1.5f
-        val dwellRange = (dwellStdDev * 2.5f).coerceAtLeast(25f)
-        if (abs(dwell - avgDwell) <= dwellRange) score += 1.5f
-        else if (dwell <= 40) score += 1.0f // Electrical spark fallback
-
-        // Factor 5: Spatial Proximity to Ghost Centroid or Cluster
-        total += 1.5f
+        // Core Invariant 2: Spatial Glitch Zone
+        totalChecks++
         val dx = x - avgX
         val dy = y - avgY
         val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-        val spatialRadius = ((xStdDev + yStdDev) * 2.0f).coerceIn(120f, 350f)
-        if (dist <= spatialRadius) {
-            score += 1.5f * (1f - dist / spatialRadius)
+        val radius = ((xStdDev + yStdDev) * 2.2f).coerceIn(120f, 350f)
+        if (dist <= radius) ghostSignals++
+
+        // Core Invariant 3: Pulse Dwell Envelope (fast electrical spark)
+        totalChecks++
+        if (dwell <= 45 || abs(dwell - avgDwell) <= (dwellStdDev * 2.5f).coerceAtLeast(20f)) {
+            ghostSignals++
         }
 
-        // Factor 6: Digitizer Batch Trajectory (ghosts enter and exit in single sub-sample)
-        total += 1.0f
-        if (historySize == 0) score += 1.0f
-
-        // Factor 7: Hardware Clock Periodicity
-        if (avgPeriodMs in 10L..3000L && periodVariance < 15f && intervalFromPrevMs > 0L) {
-            total += 1.5f
-            val tol = (avgPeriodMs * 0.15f).coerceAtLeast(15f)
-            if (abs(intervalFromPrevMs - avgPeriodMs) <= tol) score += 1.5f
+        // Core Invariant 4: Post-Finger Trailing Echo Window
+        if (timeSinceFingerMs in 2L..600L) {
+            totalChecks++
+            ghostSignals++
         }
 
-        // Factor 8: Post-Finger Trailing Echo Timing
-        if (timeSinceFingerMs in 2L..800L && postFingerEchoCount > 0) {
-            total += 1.5f
-            score += 1.5f
-        }
-
-        return score / total
+        return ghostSignals.toFloat() / totalChecks.toFloat()
     }
 
     companion object {
@@ -172,7 +148,6 @@ data class GhostFingerprint(
             val majors = entries.map { it.touchMajor }
             val vels = entries.map { it.velocityPxPerMs }
 
-            // Period stats
             val intervals = entries.map { it.intervalFromPrevMs }.filter { it in 5L..5000L }
             val avgPeriod = if (intervals.isEmpty()) 0L else (intervals.sum() / intervals.size)
             val periodVariance = if (intervals.size < 2 || avgPeriod == 0L) 100f else {
@@ -180,7 +155,6 @@ data class GhostFingerprint(
                 (diffs.sum() / diffs.size / avgPeriod * 100f)
             }
 
-            // Post-finger echo latency
             val postFingerDelays = entries.map { it.timeSinceFingerMs }.filter { it in 2L..1500L }
             val avgPostFingerDelay = if (postFingerDelays.isEmpty()) 0L else (postFingerDelays.sum() / postFingerDelays.size)
 
@@ -219,8 +193,6 @@ data class GhostFingerprint(
             avgTouchMajor = 0f, maxVelocity = 0f,
             customBlockRules = emptyList()
         )
-
-        // ---- JSON Serialization ----
 
         fun toJson(fp: GhostFingerprint): String {
             val root = JSONObject()

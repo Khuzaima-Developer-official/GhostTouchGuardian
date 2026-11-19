@@ -11,27 +11,27 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="14dp"
-        android:paddingBottom="8dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="10dp"
         app:layout_constraintTop_toTopOf="parent">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="12-FACTOR GHOST IDENTIFY"
+            android:text="GHOST TOUCH IDENTIFY"
             android:textColor="#FF5252"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Profiles all 12 physical dimensions of your screen's glitch. Tap the Safe Spot to provoke post-touch ghost touches without recording your finger."
+            android:text="Profiles core physical glitch signatures. Tap the Safe Spot to provoke post-touch ghost touches without recording your finger."
             android:textColor="#94A3B8"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- Setup panel: time selector + start button -->
@@ -40,7 +40,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp"
+        android:padding="20dp"
         app:layout_constraintTop_toBottomOf="@+id/identifyHeader">
 
         <TextView
@@ -89,20 +89,25 @@
             android:id="@+id/btnStartScan"
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="16dp"
             android:backgroundTint="#FF5252"
-            android:text="▶ START 12-FACTOR GHOST SCAN"
+            android:text="▶ START GHOST IDENTIFY SCAN"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             app:cornerRadius="12dp" />
     </LinearLayout>
 
     <!-- Active scan panel -->
-    <ScrollView
+    <LinearLayout
         android:id="@+id/scanActivePanel"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:fillViewport="true"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="8dp"
         android:visibility="gone"
         app:layout_constraintBottom_toTopOf="@+id/humanExitSlider"
         app:layout_constraintEnd_toEndOf="parent"
@@ -112,208 +117,188 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="8dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvIdentifyCountdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="30s"
+                android:textColor="#00E5FF"
+                android:textSize="36sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvCapturedSamples"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 Ghost Samples Captured"
+                    android:textColor="#FF5252"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvLastFactor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Waiting for phantom glitches..."
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Core Physical Factors Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="#0D1220"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#1E293B"
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="vertical"
+                android:padding="14dp">
 
                 <TextView
-                    android:id="@+id/tvIdentifyCountdown"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="30s"
-                    android:textColor="#00E5FF"
-                    android:textSize="32sp"
+                    android:text="CORE PHYSICAL GLITCH FACTORS"
+                    android:textColor="#38BDF8"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
-                <LinearLayout
-                    android:layout_width="0dp"
+                <TextView
+                    android:id="@+id/tvFactorMatrix"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="14dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/tvCapturedSamples"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="0 Ghost Samples Captured"
-                        android:textColor="#FF5252"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvLastFactor"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="Waiting for phantom touches..."
-                        android:textColor="#94A3B8"
-                        android:textSize="11sp" />
-                </LinearLayout>
+                    android:layout_marginTop="8dp"
+                    android:text="📍 Glitch Zone: —\n⏱ Dwell Time: —\n⚡ Physical Shockwave: —\n🔄 Trailing Echo: —"
+                    android:textColor="#CBD5E1"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="5dp" />
             </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
-            <!-- 12-Factor Live Metrics Grid Card -->
-            <com.google.android.material.card.MaterialCardView
+        <!-- Interactive Finger Tap Safe Pad -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardFingerSafeSpot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="#0B132B"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#22C55E"
+            app:strokeWidth="1.5dp">
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                app:cardBackgroundColor="#0D1220"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#1E293B"
-                app:strokeWidth="1dp">
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="14dp">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:id="@+id/tvSafeSpotTitle"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="12dp">
+                    android:text="🛡️ FINGER SAFE SPOT (TAP HERE)"
+                    android:textColor="#22C55E"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="LIVE 12-FACTOR TELEMETRY MATRIX"
-                        android:textColor="#38BDF8"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvFactorMatrix"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="F1 Coordinates: —\nF2 Dwell Time: —\nF3 Contact Size: —\nF4 Accelerometer Impulse: —\nF5 Contact Pressure: —\nF6 History Depth: —\nF7 Hardware Clock Period: —\nF8 Post-Finger Latency: —\nF9 Kinematic Velocity: —\nF10 Ghost Confidence: —"
-                        android:textColor="#CBD5E1"
-                        android:textSize="11sp"
-                        android:lineSpacingExtra="3dp"
-                        android:fontFamily="monospace" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Interactive Finger Tap Safe Pad -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardFingerSafeSpot"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                app:cardBackgroundColor="#0B132B"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#22C55E"
-                app:strokeWidth="1.5dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:id="@+id/tvSafeSpotDesc"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
                     android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="12dp">
-
-                    <TextView
-                        android:id="@+id/tvSafeSpotTitle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🛡️ FINGER SAFE SPOT (TAP HERE)"
-                        android:textColor="#22C55E"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvSafeSpotDesc"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:gravity="center"
-                        android:text="Tap your finger here to provoke post-touch ghost touches.\nTouches inside this green box are NEVER recorded as ghosts!"
-                        android:textColor="#94A3B8"
-                        android:textSize="11sp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-        </LinearLayout>
-    </ScrollView>
+                    android:text="Tap your finger here to provoke post-touch ghost touches.\nTouches inside this green box are NEVER recorded as ghosts!"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
 
     <!-- Result panel -->
-    <ScrollView
+    <LinearLayout
         android:id="@+id/resultPanel"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:fillViewport="true"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp"
         android:visibility="gone"
         app:layout_constraintBottom_toTopOf="@+id/humanExitSlider"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/identifyHeader">
 
-        <LinearLayout
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GLITCH PROFILE LEARNED"
+            android:textColor="#00E5FF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="#0D1220"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#2A364F"
+            app:strokeWidth="1dp">
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="12-FACTOR PROFILE IDENTIFIED"
-                android:textColor="#00E5FF"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/tvResultSummary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                app:cardBackgroundColor="#0D1220"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#2A364F"
-                app:strokeWidth="1dp">
+                android:padding="16dp"
+                android:text=""
+                android:textColor="#CBD5E1"
+                android:textSize="13sp"
+                android:lineSpacingExtra="5dp" />
+        </com.google.android.material.card.MaterialCardView>
 
-                <TextView
-                    android:id="@+id/tvResultSummary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="14dp"
-                    android:text=""
-                    android:textColor="#CBD5E1"
-                    android:textSize="12sp"
-                    android:lineSpacingExtra="4dp"
-                    android:fontFamily="monospace" />
-            </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveFingerprint"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="14dp"
+            android:backgroundTint="#00E5FF"
+            android:text="✅ SAVE &amp; ACTIVATE SHIELD"
+            android:textColor="#070A11"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:cornerRadius="12dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSaveFingerprint"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="12dp"
-                android:backgroundTint="#00E5FF"
-                android:text="✅ SAVE 12-FACTOR FINGERPRINT &amp; ACTIVATE"
-                android:textColor="#070A11"
-                android:textStyle="bold"
-                android:visibility="gone"
-                app:cornerRadius="12dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnDiscardScan"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginTop="8dp"
-                android:text="Discard &amp; Try Again"
-                android:textColor="#64748B"
-                app:cornerRadius="12dp"
-                app:strokeColor="#334155" />
-        </LinearLayout>
-    </ScrollView>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDiscardScan"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:text="Discard &amp; Try Again"
+            android:textColor="#64748B"
+            app:cornerRadius="12dp"
+            app:strokeColor="#334155" />
+    </LinearLayout>
 
     <!-- Slide to exit -->
     <com.antigravity.ghosttouchguardian.ui.HumanExitSliderView

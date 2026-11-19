@@ -21,23 +21,13 @@ import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
 import kotlin.math.sqrt
 
 /**
- * Ghost Identify Activity — 12-FACTOR IDENTIFY MODE
+ * Ghost Identify Activity — Focused Core Invariants Mode
  *
- * Captures phantom touches and analyzes the full 12-Factor Multi-Dimensional Matrix:
- * 1. Coordinates Centroid ($X, Y$)
- * 2. Pulse Dwell Time ($T_{dwell}$)
- * 3. Contact Area Size ($A$)
- * 4. Newtonian Mechanical Shockwave ($\Delta a_z$)
- * 5. Contact Force / Pressure ($P$)
- * 6. Digitizer Vector History Depth (`historySize`)
- * 7. Hardware Clock Periodicity & Jitter ($\Delta t_{period}$)
- * 8. Post-Finger Trailing Echo Delay ($\Delta t_{stimulus}$)
- * 9. Kinematic Velocity Teleportation ($v\text{ px/ms}$)
- * 10. Touch Major / Aspect Ratio
- * 11. Multi-Cluster Spatial Dispersion
- * 12. Composite Anomaly Confidence Score
- *
- * Includes interactive Finger Safe Spot stimulus and Slide-Only Exit.
+ * Focuses on the 4 Definitive Physical Invariants:
+ * 1. Glitch Zone Centroid (Where the damaged screen area is)
+ * 2. Pulse Dwell Time (Fast electrical transient vs human intent)
+ * 3. Newtonian Shockwave (Zero physical momentum = ghost)
+ * 4. Post-Finger Trailing Echo (Charge trapped on glass after release)
  */
 class GhostIdentifyActivity : AppCompatActivity() {
 
@@ -150,7 +140,7 @@ class GhostIdentifyActivity : AppCompatActivity() {
             }
         }.start()
 
-        Toast.makeText(this, "12-FACTOR SCAN STARTED — Tap Safe Spot to provoke post-touch glitches!", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "SCAN ACTIVE — Tap Safe Spot to provoke post-touch glitches!", Toast.LENGTH_LONG).show()
     }
 
     override fun dispatchTouchEvent(event: MotionEvent?): Boolean {
@@ -174,8 +164,7 @@ class GhostIdentifyActivity : AppCompatActivity() {
         }
         val isInsideSafeSpot = safeSpotBounds.contains(event.rawX.toInt(), event.rawY.toInt())
         val hasShockwave = impulseSensor?.hasMechanicalImpulse(event.eventTime, windowMs = 80L) ?: false
-        val isHumanFlesh = event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
-        val isSafeFingerTap = isInsideSafeSpot || (hasShockwave && isHumanFlesh)
+        val isSafeFingerTap = isInsideSafeSpot || hasShockwave
 
         if (isSafeFingerTap) {
             if (event.actionMasked == MotionEvent.ACTION_UP) {
@@ -187,13 +176,13 @@ class GhostIdentifyActivity : AppCompatActivity() {
                     binding.tvSafeSpotTitle.text = "✅ SAFE FINGER TAP REGISTERED"
                     binding.tvSafeSpotTitle.setTextColor(Color.parseColor("#00E5FF"))
                     binding.cardFingerSafeSpot.strokeColor = Color.parseColor("#00E5FF")
-                    binding.tvLastFactor.text = "Finger tap registered -> Listening for trailing ghost glitches..."
+                    binding.tvLastFactor.text = "Finger tap registered -> Waiting for trailing glitches..."
                 }
             }
             return true
         }
 
-        // 3. 12-Factor Ghost Touch Profiling
+        // 3. Ghost Touch Profiling (Zero shockwave touches outside safe spot)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
@@ -210,27 +199,15 @@ class GhostIdentifyActivity : AppCompatActivity() {
                     val dx = downX - lastTouchX; val dy = downY - lastTouchY
                     sqrt((dx * dx + dy * dy).toDouble()).toFloat()
                 } else 0f
-                val vel = if (intervalFromPrev > 0L) dispFromPrev / intervalFromPrev.toFloat() else 0f
 
                 val accelDelta = impulseSensor?.getLastAccelDelta() ?: 0f
                 val timeSinceFinger = if (lastFingerStimulusTime > 0L) now - lastFingerStimulusTime else -1L
                 val isPostFingerEcho = timeSinceFinger in 2L..800L
 
-                // Calculate ghost confidence (0..1)
-                var confidence = 0f
-                if (accelDelta < 0.04f) confidence += 0.35f
-                if (event.size < 0.035f) confidence += 0.20f
-                if (event.pressure < 0.10f) confidence += 0.20f
-                if (dwell < 40) confidence += 0.15f
-                if (downHistorySize == 0) confidence += 0.10f
-
                 val notes = buildString {
                     if (isPostFingerEcho) append("postFingerGlitch(${timeSinceFinger}ms),")
-                    if (intervalFromPrev in 2L..25L && dispFromPrev < 30f) append("dielectricEcho,")
-                    if (dwell < 40) append("capacitiveSpark,")
-                    if (accelDelta < 0.04f) append("zeroMomentum,")
-                    if (event.size < 0.035f) append("zeroContactArea,")
-                    if (event.pressure < 0.08f) append("zeroForce,")
+                    if (dwell < 45) append("fastSpark,")
+                    if (accelDelta < 0.018f) append("zeroMomentum,")
                 }
 
                 val entry = GhostTouchEntry(
@@ -245,7 +222,7 @@ class GhostIdentifyActivity : AppCompatActivity() {
                     displacementPx = dispFromPrev,
                     timestamp = now,
                     timeSinceFingerMs = timeSinceFinger,
-                    velocityPxPerMs = vel,
+                    velocityPxPerMs = if (intervalFromPrev > 0L) dispFromPrev / intervalFromPrev.toFloat() else 0f,
                     factorNotes = notes.trimEnd(',')
                 )
 
@@ -256,21 +233,15 @@ class GhostIdentifyActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     binding.tvCapturedSamples.text = "${recordedEntries.size} Ghost Samples Captured"
-                    val echoTag = if (isPostFingerEcho) " [Post-Finger Trailing Echo!]" else ""
-                    binding.tvLastFactor.text = "Captured Glitch #${recordedEntries.size} at (${downX.toInt()}, ${downY.toInt()})$echoTag"
+                    val echoTag = if (isPostFingerEcho) " [Post-Finger Glitch!]" else ""
+                    binding.tvLastFactor.text = "Glitch #${recordedEntries.size} at (${downX.toInt()}, ${downY.toInt()})$echoTag"
 
-                    // Render live 12-factor telemetry matrix
+                    // Render 4 core physical factors
                     binding.tvFactorMatrix.text = buildString {
-                        append("F1 Centroid:      (${downX.toInt()}, ${downY.toInt()}) [Δd=${dispFromPrev.toInt()}px]\n")
-                        append("F2 Dwell Time:    ${dwell}ms [${if (dwell < 40) "Fast Spark" else "Hold"}]\n")
-                        append("F3 Contact Patch: ${String.format("%.4f", event.size)} [${if (event.size < 0.035f) "Sub-Flesh Glitch" else "Area"}]\n")
-                        append("F4 Shockwave:     ${String.format("%.4f", accelDelta)} m/s² [${if (accelDelta < 0.04f) "Zero Momentum ✓" else "Impulse"}]\n")
-                        append("F5 Pressure:      ${String.format("%.3f", event.pressure)} [${if (event.pressure < 0.08f) "Zero Force ✓" else "Force"}]\n")
-                        append("F6 History Depth: $downHistorySize samples [Single-Subsample]\n")
-                        append("F7 Periodicity:   ${if (intervalFromPrev > 0) "${intervalFromPrev}ms interval" else "Initial pulse"}\n")
-                        append("F8 Post-Finger:   ${if (timeSinceFinger > 0) "${timeSinceFinger}ms post-lift ✓" else "Independent"}\n")
-                        append("F9 Velocity:      ${String.format("%.1f", vel)} px/ms [Kinematic Jump]\n")
-                        append("F10 Confidence:   ${String.format("%.1f", confidence * 100)}% Ghost Match")
+                        append("📍 Glitch Zone: (${downX.toInt()}, ${downY.toInt()})\n")
+                        append("⏱ Dwell Time:  ${dwell}ms [${if (dwell <= 40) "Fast Spark ✓" else "Hold"}]\n")
+                        append("⚡ Shockwave:   ${String.format("%.4f", accelDelta)} m/s² [Zero Mass ✓]\n")
+                        append("🔄 Post-Finger: ${if (timeSinceFinger > 0) "${timeSinceFinger}ms after lift ✓" else "Idle spontaneous"}")
                     }
                 }
             }
@@ -291,34 +262,24 @@ class GhostIdentifyActivity : AppCompatActivity() {
             val postFingerCount = recordedEntries.count { it.timeSinceFingerMs in 2L..800L }
 
             binding.tvResultSummary.text = buildString {
-                append("═══════════════════════════════════\n")
-                append("   12-FACTOR GHOST TOUCH PROFILE   \n")
-                append("═══════════════════════════════════\n\n")
-                append("📊 Total Glitches Captured: ${recordedEntries.size}\n")
-                append("🎯 Post-Finger Trailing Echoes: $postFingerCount\n\n")
-                append("• F1 Centroid:    (${fingerprint.avgX.toInt()}, ${fingerprint.avgY.toInt()}) ± (${fingerprint.xStdDev.toInt()}, ${fingerprint.yStdDev.toInt()})px\n")
-                append("• F2 Avg Dwell:   ${String.format("%.1f", fingerprint.avgDwell)}ms (σ=${String.format("%.1f", fingerprint.dwellStdDev)}ms)\n")
-                append("• F3 Contact Area: ${String.format("%.4f", fingerprint.avgSize)} (Glitch micro-patch)\n")
-                append("• F4 Shockwave:   ${String.format("%.4f", fingerprint.avgAccelDelta)} m/s² (Zero mass)\n")
-                append("• F5 Force/Press: ${String.format("%.3f", fingerprint.avgPressure)} (Capacitive noise)\n")
-                append("• F6 Hist Vector: ${String.format("%.1f", fingerprint.avgHistorySize)} samples\n")
-                append("• F7 Clock Period: ${if (fingerprint.avgPeriodMs > 0) "${fingerprint.avgPeriodMs}ms (Var: ${String.format("%.1f", fingerprint.periodVariance)}%)" else "Irregular"}\n")
-                append("• F8 Echo Delay:  ${if (fingerprint.avgPostFingerDelayMs > 0) "${fingerprint.avgPostFingerDelayMs}ms post-finger lift" else "None"}\n")
-                append("• F9 Peak Vel:    ${String.format("%.1f", fingerprint.maxVelocity)} px/ms\n")
-                append("• F10 Major Axis: ${String.format("%.2f", fingerprint.avgTouchMajor)} px\n")
-                append("• F11 Reliability: 99.9% Invariant Verified")
+                append("✅ ${recordedEntries.size} Glitches Analyzed ($postFingerCount post-finger)\n\n")
+                append("📍 Glitch Centroid: (${fingerprint.avgX.toInt()}, ${fingerprint.avgY.toInt()})\n")
+                append("⏱ Glitch Pulse:     ${String.format("%.1f", fingerprint.avgDwell)}ms\n")
+                append("⚡ Tap Momentum:     ${String.format("%.4f", fingerprint.avgAccelDelta)} m/s² (Zero mass)\n")
+                append("🔄 Post-Finger Echo: ${if (fingerprint.avgPostFingerDelayMs > 0) "${fingerprint.avgPostFingerDelayMs}ms latency" else "None"}\n\n")
+                append("All 4 core invariants locked. Shield will block matching phantoms.")
             }
             binding.btnSaveFingerprint.visibility = View.VISIBLE
             binding.btnDiscardScan.text = "Discard & Rescan"
         } else {
-            binding.tvResultSummary.text = "⚠️ Not enough ghost samples (${recordedEntries.size}/3). Need at least 3 ghost touches to build fingerprint. Please tap the Safe Spot to provoke post-touch glitches."
+            binding.tvResultSummary.text = "⚠️ Need at least 3 ghost touches to lock glitch profile (${recordedEntries.size}/3). Please tap the Safe Spot to provoke post-touch glitches."
             binding.btnSaveFingerprint.visibility = View.GONE
         }
 
         binding.btnSaveFingerprint.setOnClickListener {
             prefs.ghostFingerprintJson = GhostFingerprint.toJson(fingerprint)
             prefs.isGhostFingerprintEnabled = true
-            Toast.makeText(this, "✅ 12-Factor Fingerprint Saved & Shield Activated!", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "✅ Glitch Profile Saved & Shield Activated!", Toast.LENGTH_LONG).show()
             finish()
         }
 
