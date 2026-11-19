@@ -237,9 +237,16 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                         type = CompactTouchBuffer.TYPE_GHOST_ECHO
                         factorReason = "S Pen Static Echo (${timeSinceStylusMs}ms post-pen)"
                     }
-                    isStaticLockDetected -> {
+                    isStaticLockDetected && !isHumanConfirmed -> {
                         type = CompactTouchBuffer.TYPE_STATIC_LOCK
                         factorReason = "Static Droplet ($dwell ms)"
+                    }
+                    dwell >= 120 && isHumanConfirmed -> {
+                        type = CompactTouchBuffer.TYPE_HUMAN_FINGER
+                        factorReason = "Human Long Press ($dwell ms)"
+                        lastHumanUpTime = eventTime
+                        lastHumanUpX = x
+                        lastHumanUpY = y
                     }
                     inHotspot && !isHumanConfirmed && dwell in 8..110 -> {
                         // Glitch in hotspot

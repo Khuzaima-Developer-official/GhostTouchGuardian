@@ -231,6 +231,45 @@ class TouchProfilerEngineTest {
     }
 
     @Test
+    fun testHumanLongPressIsNotTreatedAsStaticDropletOrGhost() {
+        // User presses and holds their finger on a button for 800ms (long-press)
+        engine.processTouch(
+            action = MotionEvent.ACTION_DOWN,
+            x = 300f, y = 300f,
+            eventTime = 20000L,
+            size = 0.05f,
+            pressure = 0.15f,
+            forcedImpulse = true
+        )
+
+        // Finger is held completely still for 800ms
+        for (i in 1..8) {
+            engine.processTouch(
+                MotionEvent.ACTION_MOVE,
+                x = 300.0f, y = 300.0f,
+                eventTime = 20000L + (i * 100L),
+                downTime = 20000L,
+                size = 0.05f,
+                pressure = 0.15f
+            )
+        }
+
+        val result = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            x = 300.0f, y = 300.0f,
+            eventTime = 20850L,
+            downTime = 20000L,
+            size = 0.05f,
+            pressure = 0.15f,
+            forcedImpulse = true
+        )
+
+        assertEquals(CompactTouchBuffer.TYPE_HUMAN_FINGER, result)
+        assertEquals(1L, engine.buffer.totalHumanCount)
+        assertEquals(0L, engine.buffer.totalGhostCount)
+    }
+
+    @Test
     fun testCollinearITOSportDetected() {
         var itcShortDetected = false
         engine.onAnomalyDetected = { type, _, _, _, _ ->

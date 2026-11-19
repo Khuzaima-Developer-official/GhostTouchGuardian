@@ -97,6 +97,10 @@ data class GhostFingerprint(
         // Hard Invariant: If strong physical shockwave present, it is NEVER a ghost!
         if (accelDelta >= 0.035f) return 0f
 
+        // Intentional Human Hold Invariant: Electrical noise sparks last <= 110ms.
+        // Any touch held continuously for >= 150ms is guaranteed intentional human touch (long-press/hold).
+        if (dwell >= 150) return 0f
+
         var ghostSignals = 0
         var totalChecks = 0
 

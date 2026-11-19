@@ -47,8 +47,24 @@ class HotspotShieldService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var isTouchThrough = false
 
-    private val reArmRunnable = Runnable {
-        reArmShield()
+    private val reArmRunnable: Runnable = object : Runnable {
+        override fun run() {
+            // Human Handling & Micro-Motion Verification:
+            // While a user holds their finger down (long-press, drag, voice note, game control),
+            // the hand and finger induce continuous micro-tremors (> 0.009 m/s²).
+            // Only re-arm when the phone has been completely undisturbed/still.
+            val now = android.os.SystemClock.uptimeMillis()
+            val hasRecentMotion = impulseSensor.hasMechanicalImpulse(now, windowMs = 1500L)
+            val accelDelta = impulseSensor.getLastAccelDelta()
+
+            if (hasRecentMotion || accelDelta >= 0.009f) {
+                // User is still actively holding or touching the device — postpone re-arm!
+                handler.postDelayed(this, 2000L)
+            } else {
+                // Phone is still and undisturbed — safe to re-arm shield without dropping human touches
+                reArmShield()
+            }
+        }
     }
 
     override fun onCreate() {
@@ -173,10 +189,11 @@ class HotspotShieldService : Service() {
             } catch (_: Exception) {}
         }
 
-        // Quick 500ms unlock window: enough for human tap/double-tap to pass,
-        // but immediately re-arms before trailing post-finger ghost echoes can escape!
+        // Generous 4-second baseline unlock window:
+        // Allows human long-presses (500-2500ms), drag-and-drop, typing, and holds to complete naturally.
+        // reArmRunnable will verify the phone is completely undisturbed before re-arming so ongoing holds are NEVER severed!
         handler.removeCallbacks(reArmRunnable)
-        handler.postDelayed(reArmRunnable, 500L)
+        handler.postDelayed(reArmRunnable, 4000L)
     }
 
     private fun reArmShield() {
@@ -272,10 +289,14 @@ class HotspotShieldService : Service() {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    // NEVER consume MOVE — this is what breaks scrolling
-                    // If we were in pass-through, stay pass-through
+                    // Finger is actively moving / scrolling / dragging — refresh the pass-through window
+                    if (isTouchThrough) {
+                        handler.removeCallbacks(reArmRunnable)
+                        handler.postDelayed(reArmRunnable, 4000L)
+                    }
+
+                    // Check again on MOVE in case shockwave arrives late (device vibration propagation delay)
                     if (!pendingIsHuman) {
-                        // Check again on MOVE in case shockwave arrives late (device vibration propagation delay)
                         val nowShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 100L)
                         if (nowShockwave) {
                             pendingIsHuman = true
@@ -312,32 +333,25 @@ class HotspotShieldService : Service() {
                         return true
                     }
 
-                    if (finalIsHuman) {
-                        // Human confirmed — ensure pass-through is active, let UP through
+                    // Long-Press / Human Hold Invariant:
+                    // Any touch held continuously for > 110ms is guaranteed human intent (hold/press/drag).
+                    // Transient electrical glitch noise sparks ALWAYS die within <= 45ms (max 110ms).
+                    if (dwell > 110 || finalIsHuman) {
+                        // Human confirmed — ensure pass-through is active, let UP through smoothly
                         if (!isTouchThrough) passThroughTemporarily()
                         return false
                     }
 
-                    // Ghost confirmed: zero shockwave + sub-45ms dwell + zero flesh contact
-                    // Ghost touches always have dwell <= 110ms. Longer = human long-press.
-                    if (dwell <= 110) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        // Suppress the UP — the underlying app already received ACTION_DOWN
-                        // but we inject ACTION_CANCEL to roll back its gesture state
-                        val cancelEvent = MotionEvent.obtain(event).also {
-                            it.action = MotionEvent.ACTION_CANCEL
-                        }
-                        try {
-                            super.onTouchEvent(cancelEvent)
-                        } catch (_: Exception) {}
-                        cancelEvent.recycle()
-                        return true // Swallow the ghost ACTION_UP
+                    // Ghost confirmed: zero shockwave + dwell <= 110ms + zero flesh contact -> SWALLOW IT!
+                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                    val cancelEvent = MotionEvent.obtain(event).also {
+                        it.action = MotionEvent.ACTION_CANCEL
                     }
-
-                    // Dwell > 110ms with no shockwave = human long-press with low pressure sensor
-                    // Let it pass safely
-                    if (!isTouchThrough) passThroughTemporarily()
-                    return false
+                    try {
+                        super.onTouchEvent(cancelEvent)
+                    } catch (_: Exception) {}
+                    cancelEvent.recycle()
+                    return true // Swallow the ghost ACTION_UP
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
