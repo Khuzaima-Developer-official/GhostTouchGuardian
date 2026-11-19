@@ -18,7 +18,7 @@ class MechanicalImpulseSensor(context: Context) : SensorEventListener {
     private val isLinear = sensor?.type == Sensor.TYPE_LINEAR_ACCELERATION
 
     // Ring buffer
-    private val bufferSize = 64
+    private val bufferSize = 128
     private val timestamps = LongArray(bufferSize)
     private val impulseMagnitudes = FloatArray(bufferSize)
     private var head = 0
@@ -100,7 +100,7 @@ class MechanicalImpulseSensor(context: Context) : SensorEventListener {
         }
     }
 
-    fun hasMechanicalImpulse(touchTimeMs: Long, windowMs: Long = 30L): Boolean {
+    fun hasMechanicalImpulse(touchTimeMs: Long, windowMs: Long = 80L): Boolean {
         // Check impulse
         val minTime = touchTimeMs - windowMs
         val maxTime = touchTimeMs + windowMs
@@ -119,6 +119,7 @@ class MechanicalImpulseSensor(context: Context) : SensorEventListener {
     }
 
     companion object {
-        private const val THRESHOLD_IMPULSE = 0.045f
+        // Lowered from 0.045f to 0.016f so soft, natural finger taps are effortlessly detected
+        private const val THRESHOLD_IMPULSE = 0.016f
     }
 }

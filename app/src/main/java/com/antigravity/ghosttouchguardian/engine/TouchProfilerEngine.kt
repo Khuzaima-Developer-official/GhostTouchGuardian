@@ -178,8 +178,10 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 val dwell = (eventTime - lastDownTime).toInt()
                 val deltaSinceLastUp = if (lastHumanUpTime > 0L) lastDownTime - lastHumanUpTime else 9999L
 
-                // Check shockwave
-                val hasShockwave = forcedImpulse ?: (impulseSensor?.hasMechanicalImpulse(lastDownTime) ?: false)
+                // Check shockwave & physical contact markers
+                val hasImpulse = forcedImpulse ?: (impulseSensor?.hasMechanicalImpulse(lastDownTime, windowMs = 80L) ?: false)
+                val isFleshyHuman = (size >= 0.04f && pressure >= 0.12f) || pointerCount > 1
+                val isHumanConfirmed = if (forcedImpulse == false) false else (hasImpulse || isFleshyHuman)
 
                 // Check hotspot
                 val inHotspot = calibratedHotspots.any { it.contains(x, y) }
@@ -221,22 +223,22 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                         type = CompactTouchBuffer.TYPE_STATIC_LOCK
                         factorReason = "Static Droplet ($dwell ms)"
                     }
-                    inHotspot && !hasShockwave && dwell in 8..110 -> {
+                    inHotspot && !isHumanConfirmed && dwell in 8..110 -> {
                         // Glitch in hotspot
                         type = CompactTouchBuffer.TYPE_GHOST_HOTSPOT
                         factorReason = "Calibrated Ghost ($dwell ms, zero shockwave)"
                     }
-                    matchesPeriodicity && !hasShockwave && dwell in 8..90 -> {
+                    matchesPeriodicity && !isHumanConfirmed && dwell in 8..90 -> {
                         // Periodic machine glitch
                         type = CompactTouchBuffer.TYPE_GHOST_IDLE
                         factorReason = "Periodic Ghost ($dwell ms, ${intervalLiftToDown}ms period)"
                     }
-                    matchesFingerprint && !hasShockwave -> {
+                    matchesFingerprint && !isHumanConfirmed -> {
                         // Fingerprint matched — multi-factor ghost (learned from Identify Mode)
                         type = CompactTouchBuffer.TYPE_GHOST_HOTSPOT
                         factorReason = "Fingerprint Ghost (score=${String.format("%.2f", fingerprintScore)}, dwell=${dwell}ms)"
                     }
-                    matchesCustomRule && !hasShockwave -> {
+                    matchesCustomRule && !isHumanConfirmed -> {
                         // User's custom block rule matched
                         type = CompactTouchBuffer.TYPE_GHOST_IDLE
                         factorReason = "Custom Rule Block (dwell=${dwell}ms)"

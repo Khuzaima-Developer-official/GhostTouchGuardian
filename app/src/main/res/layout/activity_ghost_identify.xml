@@ -26,7 +26,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Every touch on this screen = GHOST touch. App records all 12 factors to build your device's Ghost Fingerprint."
+            android:text="Learn phantom glitch patterns. Tap inside the Safe Spot to provoke post-touch ghost touches without recording your finger."
             android:textColor="#94A3B8"
             android:textSize="13sp" />
     </LinearLayout>
@@ -103,12 +103,15 @@
     <LinearLayout
         android:id="@+id/scanActivePanel"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
+        android:layout_height="0dp"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="24dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/resultPanel"
+        app:layout_constraintBottom_toTopOf="@+id/humanExitSlider"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/identifyHeader">
@@ -116,48 +119,78 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="SCANNING..."
+            android:text="SCANNING IN PROGRESS"
             android:textColor="#FF5252"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvIdentifyCountdown"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:text="30"
             android:textColor="#00E5FF"
-            android:textSize="80sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SECONDS REMAINING"
-            android:textColor="#64748B"
-            android:textSize="11sp"
+            android:textSize="60sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvCapturedSamples"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
             android:text="0 Ghost Samples Recorded"
             android:textColor="#FF5252"
-            android:textSize="16sp"
+            android:textSize="15sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvLastFactor"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="6dp"
             android:gravity="center"
             android:text="Waiting for ghost touches..."
             android:textColor="#64748B"
             android:textSize="11sp" />
+
+        <!-- Interactive Finger Tap Safe Pad -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardFingerSafeSpot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="#0B132B"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#22C55E"
+            app:strokeWidth="1.5dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:id="@+id/tvSafeSpotTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🛡️ FINGER SAFE SPOT (TAP HERE)"
+                    android:textColor="#22C55E"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSafeSpotDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
+                    android:text="Tap your finger here to provoke post-touch ghost touches.\nTouches inside this green box are NEVER recorded as ghosts!"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
     <!-- Result panel -->

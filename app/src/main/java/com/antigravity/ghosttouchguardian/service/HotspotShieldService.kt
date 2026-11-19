@@ -22,7 +22,6 @@ import com.antigravity.ghosttouchguardian.engine.HotspotZone
 import com.antigravity.ghosttouchguardian.model.GhostFingerprint
 import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * HotspotShieldService — System-Wide Background Ghost Touch Blocker
@@ -30,8 +29,9 @@ import kotlin.math.min
  * Positions a targeted overlay specifically over the calibrated damaged/glitch zone.
  * - The rest of the screen (90%+) is untouched, with ZERO interference for normal apps.
  * - In the glitch zone:
- *   - Phantom glitches (zero shockwave) are swallowed.
- *   - Real finger taps (with shockwave) trigger temporary pass-through (1.5s) so buttons/keys can be tapped.
+ *   - Human finger taps (shockwave, flesh size >= 0.035, pressure >= 0.10) unlock pass-through
+ *     for 3 seconds so the user can easily tap, double-tap, and type.
+ *   - Ghost touches (no shockwave, tiny contact size, zero pressure) are instantly swallowed.
  */
 class HotspotShieldService : Service() {
 
@@ -155,7 +155,6 @@ class HotspotShieldService : Service() {
     }
 
     private fun passThroughTemporarily() {
-        if (isTouchThrough) return
         isTouchThrough = true
 
         overlayParams?.let { p ->
@@ -165,8 +164,9 @@ class HotspotShieldService : Service() {
             } catch (_: Exception) {}
         }
 
+        // Reset timer on every human tap so user can comfortably tap or type continuously
         handler.removeCallbacks(reArmRunnable)
-        handler.postDelayed(reArmRunnable, 1500L) // 1.5 seconds unlock for human typing/tapping
+        handler.postDelayed(reArmRunnable, 3000L) // 3 seconds uninterrupted touch-through
     }
 
     private fun reArmShield() {
@@ -203,12 +203,12 @@ class HotspotShieldService : Service() {
     private inner class HotspotOverlayView(context: Context) : View(context) {
 
         private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(30, 255, 23, 68) // Subtle translucent shield
+            color = Color.argb(25, 255, 23, 68) // Subtle translucent shield
             style = Paint.Style.FILL
         }
 
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(90, 255, 23, 68)
+            color = Color.argb(80, 255, 23, 68)
             style = Paint.Style.STROKE
             strokeWidth = 2f
         }
@@ -224,15 +224,18 @@ class HotspotShieldService : Service() {
         override fun onTouchEvent(event: MotionEvent): Boolean {
             if (isTouchThrough) return false
 
-            // Check physical shockwave
-            val hasShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime)
-            if (hasShockwave) {
-                // REAL FINGER TAP: Unlock shield immediately so finger reaches underlying app
+            // Multi-Factor Human Verification
+            val hasShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 80L)
+            val isFleshyContact = event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
+            val isHuman = hasShockwave || isFleshyContact
+
+            if (isHuman) {
+                // REAL FINGER TAP: Unlock shield immediately for 3 seconds so tap reaches underlying app effortlessly!
                 passThroughTemporarily()
                 return false
             }
 
-            // GHOST TOUCH CONFIRMED: Zero mechanical shockwave in glitch zone -> SWALLOW IT!
+            // GHOST TOUCH CONFIRMED: Zero shockwave AND zero flesh size -> SWALLOW IT!
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                 prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
             }

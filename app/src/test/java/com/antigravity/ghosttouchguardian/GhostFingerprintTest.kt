@@ -125,4 +125,30 @@ class GhostFingerprintTest {
         assertEquals(1L, engine.buffer.totalHumanCount)
         assertEquals(0L, engine.buffer.totalGhostCount)
     }
+
+    @Test
+    fun testFleshyFingerTapWithoutShockwaveAlsoAllowedInGlitchZone() {
+        val samples = listOf(
+            GhostTouchEntry(200f, 300f, 20, 0.02f, 0.04f, 4f, 0, 0.01f, 100L, 2f, 1000L),
+            GhostTouchEntry(202f, 301f, 22, 0.02f, 0.04f, 4f, 0, 0.01f, 100L, 2f, 1100L),
+            GhostTouchEntry(198f, 299f, 19, 0.02f, 0.04f, 4f, 0, 0.01f, 100L, 2f, 1200L)
+        )
+        engine.ghostFingerprint = GhostFingerprint.fromEntries(samples)
+
+        // Real finger taps softly (e.g. phone on bed, so shockwave is absorbed), BUT contact has natural human flesh size and pressure
+        engine.processTouch(android.view.MotionEvent.ACTION_DOWN, x = 201f, y = 300f, eventTime = 7000L)
+        val result = engine.processTouch(
+            android.view.MotionEvent.ACTION_UP,
+            x = 201f, y = 300f,
+            eventTime = 7060L,
+            downTime = 7000L,
+            size = 0.08f,     // Human pulp contact patch
+            pressure = 0.22f, // Human contact pressure
+            forcedImpulse = null // Natural sensor mode
+        )
+
+        assertEquals("Fleshy finger tap MUST pass smoothly without being blocked", CompactTouchBuffer.TYPE_HUMAN_FAST_TAP, result)
+        assertEquals(1L, engine.buffer.totalHumanCount)
+        assertEquals(0L, engine.buffer.totalGhostCount)
+    }
 }
