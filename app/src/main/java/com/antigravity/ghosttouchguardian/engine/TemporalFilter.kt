@@ -9,16 +9,13 @@ class TemporalFilter {
     var isEnabled: Boolean = true
 
     var echoCooldownWindowMs: Long = GhostTouchProfile.BALANCED.echoWindowMs
-    var minValidDwellTimeMs: Int = GhostTouchProfile.BALANCED.maxDwellMs
 
     private var lastValidReleaseTimestamp: Long = 0L
     private var lastValidReleaseX: Float = -1f
     private var lastValidReleaseY: Float = -1f
 
     fun applyProfile(profile: GhostTouchProfile) {
-        // Set profile
         echoCooldownWindowMs = profile.echoWindowMs
-        minValidDwellTimeMs = profile.maxDwellMs
     }
 
     fun shouldSuppressTouch(
@@ -27,8 +24,7 @@ class TemporalFilter {
         isStylus: Boolean,
         x: Float = 0f,
         y: Float = 0f,
-        touchSize: Float = 0f,
-        touchMajor: Float = 0f
+        touchSize: Float = 0f
     ): Boolean {
         // Stylus bypass
         if (!isEnabled || isStylus) return false
@@ -36,7 +32,7 @@ class TemporalFilter {
         if (isDown && lastValidReleaseTimestamp > 0L) {
             val delta = eventTime - lastValidReleaseTimestamp
             // Dielectric rebound
-            if (delta in 2L..25L) {
+            if (delta in 2L..echoCooldownWindowMs) {
                 if (lastValidReleaseX >= 0f && lastValidReleaseY >= 0f) {
                     val dx = x - lastValidReleaseX
                     val dy = y - lastValidReleaseY
@@ -51,14 +47,12 @@ class TemporalFilter {
     }
 
     fun registerValidFingerRelease(eventTime: Long, x: Float = -1f, y: Float = -1f) {
-        // Record release
         lastValidReleaseTimestamp = eventTime
         lastValidReleaseX = x
         lastValidReleaseY = y
     }
 
     fun flush() {
-        // Reset timestamp
         lastValidReleaseTimestamp = 0L
         lastValidReleaseX = -1f
         lastValidReleaseY = -1f

@@ -5,18 +5,14 @@ enum class GhostTouchProfile(
     val title: String,
     val subtitle: String,
     val maxDwellMs: Int,
-    val maxContactSize: Float,
-    val echoWindowMs: Long,
-    val jitterThresholdPx: Float
+    val echoWindowMs: Long
 ) {
     BALANCED(
         id = "balanced",
         title = "Balanced",
         subtitle = "Optimal balance for daily phone usage",
         maxDwellMs = 35,
-        maxContactSize = 0.045f,
-        echoWindowMs = 55L,
-        jitterThresholdPx = 3.0f
+        echoWindowMs = 55L
     ),
 
     MICRO_SPARKS(
@@ -24,9 +20,7 @@ enum class GhostTouchProfile(
         title = "Gaming Safe",
         subtitle = "Fast electrical noise filter without input lag",
         maxDwellMs = 22,
-        maxContactSize = 0.030f,
-        echoWindowMs = 35L,
-        jitterThresholdPx = 1.5f
+        echoWindowMs = 35L
     ),
 
     TRAILING_ECHO(
@@ -34,9 +28,7 @@ enum class GhostTouchProfile(
         title = "Trailing Echo",
         subtitle = "Suppresses phantom taps after finger release",
         maxDwellMs = 45,
-        maxContactSize = 0.055f,
-        echoWindowMs = 75L,
-        jitterThresholdPx = 4.0f
+        echoWindowMs = 75L
     ),
 
     SEVERE_UV_GLUE(
@@ -44,14 +36,11 @@ enum class GhostTouchProfile(
         title = "High (Damaged)",
         subtitle = "Aggressive filter for UV glue or digitizer cracks",
         maxDwellMs = 55,
-        maxContactSize = 0.070f,
-        echoWindowMs = 85L,
-        jitterThresholdPx = 5.5f
+        echoWindowMs = 85L
     );
 
     companion object {
         fun fromId(id: String): GhostTouchProfile {
-            // Find profile
             return values().firstOrNull { it.id == id } ?: BALANCED
         }
     }

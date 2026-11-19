@@ -21,14 +21,17 @@ import com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine
 import com.antigravity.ghosttouchguardian.engine.HotspotZone
 import com.antigravity.ghosttouchguardian.model.GhostFingerprint
 import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * HotspotShieldService — System-Wide Background Ghost Touch Blocker
  *
- * Runs continuously in background with SYSTEM_ALERT_WINDOW overlay.
- * Uses 12-factor physics verification:
- * - If touch has mechanical shockwave (real finger) -> PASSED THROUGH to apps
- * - If touch matches calibrated zones or learned Ghost Fingerprint without shockwave -> BLOCKED/CONSUMED
+ * Positions a targeted overlay specifically over the calibrated damaged/glitch zone.
+ * - The rest of the screen (90%+) is untouched, with ZERO interference for normal apps.
+ * - In the glitch zone:
+ *   - Phantom glitches (zero shockwave) are swallowed.
+ *   - Real finger taps (with shockwave) trigger temporary pass-through (1.5s) so buttons/keys can be tapped.
  */
 class HotspotShieldService : Service() {
 
@@ -37,11 +40,16 @@ class HotspotShieldService : Service() {
     private lateinit var impulseSensor: MechanicalImpulseSensor
 
     private var overlayView: HotspotOverlayView? = null
+    private var overlayParams: WindowManager.LayoutParams? = null
     private var activeZones: List<HotspotZone> = emptyList()
     private var ghostFingerprint: GhostFingerprint = GhostFingerprint.empty()
 
     private val handler = Handler(Looper.getMainLooper())
-    private var isSuspended = false
+    private var isTouchThrough = false
+
+    private val reArmRunnable = Runnable {
+        reArmShield()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -70,7 +78,10 @@ class HotspotShieldService : Service() {
             }
             ACTION_REFRESH_ZONES -> {
                 refreshZones()
-                updateOverlay()
+                removeOverlay()
+                if (checkOverlayPermission()) {
+                    attachOverlay()
+                }
             }
         }
         return START_STICKY
@@ -90,10 +101,35 @@ class HotspotShieldService : Service() {
     private fun attachOverlay() {
         if (overlayView != null) return
 
+        // Calculate targeted bounding box of the glitch region
+        var boxLeft = 0
+        var boxTop = 0
+        var boxWidth = 0
+        var boxHeight = 0
+
+        if (activeZones.isNotEmpty()) {
+            val minX = activeZones.minOf { it.left }.toInt().coerceAtLeast(0)
+            val minY = activeZones.minOf { it.top }.toInt().coerceAtLeast(0)
+            val maxX = activeZones.maxOf { it.right }.toInt()
+            val maxY = activeZones.maxOf { it.bottom }.toInt()
+            boxLeft = max(0, minX - 10)
+            boxTop = max(0, minY - 10)
+            boxWidth = max(100, (maxX - minX) + 20)
+            boxHeight = max(100, (maxY - minY) + 20)
+        } else if (ghostFingerprint.isValid) {
+            val radius = (ghostFingerprint.xStdDev * 2.5f).coerceIn(80f, 250f).toInt()
+            boxLeft = max(0, ghostFingerprint.avgX.toInt() - radius)
+            boxTop = max(0, ghostFingerprint.avgY.toInt() - radius)
+            boxWidth = max(100, radius * 2)
+            boxHeight = max(100, radius * 2)
+        }
+
+        if (boxWidth <= 0 || boxHeight <= 0) return
+
         val view = HotspotOverlayView(this)
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
+            boxWidth,
+            boxHeight,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -107,104 +143,96 @@ class HotspotShieldService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
+            x = boxLeft
+            y = boxTop
         }
 
         try {
             windowManager.addView(view, params)
             overlayView = view
+            overlayParams = params
         } catch (_: Exception) {}
     }
 
-    private fun updateOverlay() {
-        overlayView?.invalidate()
+    private fun passThroughTemporarily() {
+        if (isTouchThrough) return
+        isTouchThrough = true
+
+        overlayParams?.let { p ->
+            p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            try {
+                overlayView?.let { windowManager.updateViewLayout(it, p) }
+            } catch (_: Exception) {}
+        }
+
+        handler.removeCallbacks(reArmRunnable)
+        handler.postDelayed(reArmRunnable, 1500L) // 1.5 seconds unlock for human typing/tapping
+    }
+
+    private fun reArmShield() {
+        isTouchThrough = false
+        overlayParams?.let { p ->
+            p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+            try {
+                overlayView?.let { windowManager.updateViewLayout(it, p) }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun removeOverlay() {
+        handler.removeCallbacks(reArmRunnable)
         overlayView?.let {
             try {
                 windowManager.removeView(it)
             } catch (_: Exception) {}
         }
         overlayView = null
+        overlayParams = null
+        isTouchThrough = false
     }
 
     override fun onDestroy() {
         super.onDestroy()
         removeOverlay()
         impulseSensor.stop()
-        handler.removeCallbacksAndMessages(null)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // Background shield overlay view
+    // Glitch zone overlay view
     private inner class HotspotOverlayView(context: Context) : View(context) {
 
         private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(35, 255, 23, 68)
+            color = Color.argb(30, 255, 23, 68) // Subtle translucent shield
             style = Paint.Style.FILL
         }
 
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(120, 255, 23, 68)
+            color = Color.argb(90, 255, 23, 68)
             style = Paint.Style.STROKE
-            strokeWidth = 2.5f
-        }
-
-        private val fpCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(25, 0, 229, 255)
-            style = Paint.Style.FILL
+            strokeWidth = 2f
         }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            if (isSuspended) return
-
-            // Render calibrated zones
-            for (z in activeZones) {
-                canvas.drawRect(z.left, z.top, z.right, z.bottom, boxPaint)
-                canvas.drawRect(z.left, z.top, z.right, z.bottom, borderPaint)
-            }
-
-            // Render ghost fingerprint region if available
-            if (ghostFingerprint.isValid) {
-                val radius = (ghostFingerprint.xStdDev * 2f).coerceIn(80f, 250f)
-                canvas.drawCircle(ghostFingerprint.avgX, ghostFingerprint.avgY, radius, fpCirclePaint)
-            }
+            if (isTouchThrough) return
+            // Draw targeted shield zone
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), boxPaint)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), borderPaint)
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (isSuspended) return false
+            if (isTouchThrough) return false
 
-            val x = event.x
-            val y = event.y
-
-            // 1. Check if in calibrated bounding box
-            val inHotspot = activeZones.any { it.contains(x, y) }
-
-            // 2. Check if matches learned Ghost Fingerprint (multi-dimensional score)
-            val accelDelta = impulseSensor.getLastAccelDelta()
-            val fpScore = if (ghostFingerprint.isValid) {
-                ghostFingerprint.matchScore(x, y, 35, event.size, event.pressure, accelDelta)
-            } else 0f
-            val matchesFingerprint = fpScore >= 0.60f
-
-            // 3. Check custom user block rules
-            val matchesCustom = ghostFingerprint.customBlockRules.any { it.matches(x, y, 50) }
-
-            if (!inHotspot && !matchesFingerprint && !matchesCustom) {
-                // Not in any ghost profile -> pass directly to underlying app
-                return false
-            }
-
-            // 4. Critical Invariant: Check physical shockwave (Newtonian impulse)
+            // Check physical shockwave
             val hasShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime)
             if (hasShockwave) {
-                // REAL FINGER DETECTED with physical momentum -> NEVER BLOCK!
+                // REAL FINGER TAP: Unlock shield immediately so finger reaches underlying app
+                passThroughTemporarily()
                 return false
             }
 
-            // Ghost touch confirmed (zero shockwave + matches ghost profile) -> CONSUME IT!
+            // GHOST TOUCH CONFIRMED: Zero mechanical shockwave in glitch zone -> SWALLOW IT!
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                 prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
             }
