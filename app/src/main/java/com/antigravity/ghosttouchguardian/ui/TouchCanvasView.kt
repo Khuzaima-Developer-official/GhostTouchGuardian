@@ -162,6 +162,14 @@ class TouchCanvasView @JvmOverloads constructor(
                     canvas.drawCircle(x, y, radius * 1.4f, ghostIdlePaint)
                     drawPillLabel(canvas, "EMI TELEPORT ($dwell ms)", x, y, 0xFFFF1744.toInt())
                 }
+                CompactTouchBuffer.TYPE_STATIC_LOCK -> {
+                    canvas.drawCircle(x, y, radius * 1.5f, ghostIdlePaint)
+                    drawPillLabel(canvas, "STATIC DROPLET ($dwell ms)", x, y, 0xFF00E5FF.toInt())
+                }
+                CompactTouchBuffer.TYPE_GRID_COLINEAR -> {
+                    canvas.drawCircle(x, y, radius * 1.3f, ghostIdlePaint)
+                    drawPillLabel(canvas, "ITO SHORT ($dwell ms)", x, y, 0xFFFF1744.toInt())
+                }
                 CompactTouchBuffer.TYPE_SPEN -> {
                     canvas.drawCircle(x, y, 26f, spenPaint)
                     drawPillLabel(canvas, "S PEN", x, y, 0xFFB388FF.toInt())

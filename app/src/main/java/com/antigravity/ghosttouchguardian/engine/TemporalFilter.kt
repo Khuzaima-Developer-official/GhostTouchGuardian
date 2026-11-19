@@ -33,22 +33,17 @@ class TemporalFilter {
         // Stylus bypass
         if (!isEnabled || isStylus) return false
 
-        // Biological pass: Any physical ellipse or area is guaranteed human
-        if (touchMajor >= 15f || touchSize >= 0.05f) return false
-
         if (isDown && lastValidReleaseTimestamp > 0L) {
             val delta = eventTime - lastValidReleaseTimestamp
-            // True dielectric collapse occurs within 2-18ms of release at the same locus
-            if (delta in 2L..18L) {
-                // Proximity check
+            // Dielectric rebound
+            if (delta in 2L..25L) {
                 if (lastValidReleaseX >= 0f && lastValidReleaseY >= 0f) {
                     val dx = x - lastValidReleaseX
                     val dy = y - lastValidReleaseY
                     val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-                    // Localized unphysical echo
-                    if (dist <= 35f && touchSize < 0.04f) return true
+                    if (dist <= 28f) return true
                 } else {
-                    if (touchSize < 0.04f) return true
+                    return true
                 }
             }
         }
