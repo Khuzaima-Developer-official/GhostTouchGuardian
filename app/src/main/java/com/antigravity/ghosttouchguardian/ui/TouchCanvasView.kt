@@ -48,14 +48,14 @@ class TouchCanvasView @JvmOverloads constructor(
 
     // Label bg
     private val labelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xDD0B101B.toInt()
+        color = 0xEE0B101B.toInt()
         style = Paint.Style.FILL
     }
 
     // Label text
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFF1F5F9.toInt()
-        textSize = 36f
+        textSize = 34f
         isFakeBoldText = true
     }
 
@@ -67,10 +67,37 @@ class TouchCanvasView @JvmOverloads constructor(
         isFakeBoldText = false
     }
 
+    // Mode title paint
+    private val modeTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF38BDF8.toInt()
+        textSize = 38f
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
+
+    // Ignored hint paint
+    private val ignoredHintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00E676.toInt()
+        textSize = 28f
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
+
     private val pillRect = RectF()
+    private var lastIgnoredDwell: Int = -1
+    private var lastIgnoredTime: Long = 0L
+
+    init {
+        // Init view
+    }
+
+    fun setIgnoredFingerTelemetry(dwell: Int) {
+        lastIgnoredDwell = dwell
+        lastIgnoredTime = System.currentTimeMillis()
+        invalidate()
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Process touch
         val engine = profiler ?: return super.onTouchEvent(event)
         engine.processTouchEvent(event)
         invalidate()
@@ -82,15 +109,32 @@ class TouchCanvasView @JvmOverloads constructor(
         val engine = profiler ?: return
         val buffer = engine.buffer
         val count = buffer.size
+        val isGhostOnly = engine.isGhostOnlyMode
+
+        // Mode banner at top
+        if (isGhostOnly) {
+            canvas.drawText("GHOST-ONLY FILTER ACTIVE", width / 2f, 60f, modeTitlePaint)
+            val isRecentlyIgnored = (System.currentTimeMillis() - lastIgnoredTime) < 2000L
+            if (isRecentlyIgnored && lastIgnoredDwell > 0) {
+                canvas.drawText("Finger Tap Ignored (${lastIgnoredDwell}ms) • Only Ghost Taps Allowed", width / 2f, 105f, ignoredHintPaint)
+            } else {
+                canvas.drawText("Finger taps are filtered out • Waiting for real ghost touch...", width / 2f, 105f, hintPaint)
+            }
+        }
 
         if (count == 0) {
-            // Empty state
-            canvas.drawText("CANVAS READY", width / 2f, height / 2f - 20f, hintPaint)
-            canvas.drawText("Touch screen or place phone on table", width / 2f, height / 2f + 24f, hintPaint)
+            if (isGhostOnly) {
+                canvas.drawText("FILTER ENGAGED", width / 2f, height / 2f - 20f, hintPaint)
+                canvas.drawText("Tap anywhere: Real fingers will NOT trigger", width / 2f, height / 2f + 24f, hintPaint)
+                canvas.drawText("Only actual ghost touches will appear in RED", width / 2f, height / 2f + 68f, hintPaint)
+            } else {
+                canvas.drawText("DIAGNOSTIC CANVAS READY", width / 2f, height / 2f - 20f, hintPaint)
+                canvas.drawText("Tap screen to test click latency & physical profile", width / 2f, height / 2f + 24f, hintPaint)
+            }
             return
         }
 
-        // Draw events
+        // Draw recorded events
         val xArr = buffer.xCoords
         val yArr = buffer.yCoords
         val typeArr = buffer.eventTypes
@@ -114,23 +158,27 @@ class TouchCanvasView @JvmOverloads constructor(
                     canvas.drawCircle(x, y, radius * 1.3f, ghostEchoPaint)
                     drawPillLabel(canvas, "ECHO ($dwell ms)", x, y, 0xFFFF9100.toInt())
                 }
+                CompactTouchBuffer.TYPE_GHOST_TELEPORT -> {
+                    canvas.drawCircle(x, y, radius * 1.4f, ghostIdlePaint)
+                    drawPillLabel(canvas, "EMI TELEPORT ($dwell ms)", x, y, 0xFFFF1744.toInt())
+                }
                 CompactTouchBuffer.TYPE_SPEN -> {
                     canvas.drawCircle(x, y, 26f, spenPaint)
                     drawPillLabel(canvas, "S PEN", x, y, 0xFFB388FF.toInt())
                 }
                 CompactTouchBuffer.TYPE_HUMAN_FAST_TAP -> {
                     canvas.drawCircle(x, y, radius, humanPaint)
-                    drawPillLabel(canvas, "FAST TAP ($dwell ms)", x, y, 0xFF00E676.toInt())
+                    drawPillLabel(canvas, "HUMAN CLICK ($dwell ms)", x, y, 0xFF00E676.toInt())
                 }
                 else -> {
                     canvas.drawCircle(x, y, radius, humanPaint)
+                    drawPillLabel(canvas, "HUMAN ($dwell ms)", x, y, 0xFF00E676.toInt())
                 }
             }
         }
     }
 
     private fun drawPillLabel(canvas: Canvas, text: String, x: Float, y: Float, accentColor: Int) {
-        // Boundary clamp
         val textWidth = textPaint.measureText(text)
         val pad = 14f
         var startX = x + 36f

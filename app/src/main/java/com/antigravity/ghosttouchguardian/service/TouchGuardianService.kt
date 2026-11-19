@@ -11,6 +11,9 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.antigravity.ghosttouchguardian.R
@@ -27,6 +30,8 @@ class TouchGuardianService : Service() {
 
     private var screenReceiver: ScreenStateReceiver? = null
     private var isScreenActive: Boolean = true
+    private var blockedAnomalyCount: Int = 0
+    private var lastAnomalySummary: String = "No anomalies"
 
     override fun onCreate() {
         super.onCreate()
@@ -44,11 +49,14 @@ class TouchGuardianService : Service() {
 
         val notification = buildNotification(temporalFilter.isEnabled)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Foreground service
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
-            // Foreground legacy
             startForeground(NOTIFICATION_ID, notification)
+        }
+
+        // Hook profiler anomaly callback
+        profiler.onAnomalyDetected = { type, x, y, dwell, reason ->
+            handleAnomalyDetected(type, x, y, dwell, reason)
         }
 
         // Screen listener
@@ -60,7 +68,6 @@ class TouchGuardianService : Service() {
             onScreenOff = {
                 isScreenActive = false
                 temporalFilter.isEnabled = false
-                // Flush buffers
                 profiler.flush()
                 temporalFilter.flush()
             }
@@ -81,7 +88,6 @@ class TouchGuardianService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TOGGLE -> {
-                // Toggle state
                 temporalFilter.isEnabled = !temporalFilter.isEnabled
                 prefs.isGuardianEnabled = temporalFilter.isEnabled
                 val notification = buildNotification(temporalFilter.isEnabled)
@@ -89,7 +95,6 @@ class TouchGuardianService : Service() {
                 manager.notify(NOTIFICATION_ID, notification)
             }
             ACTION_UPDATE_PROFILE -> {
-                // Update profile
                 val profile = prefs.currentProfile
                 profiler.profile = profile
                 temporalFilter.applyProfile(profile)
@@ -98,12 +103,15 @@ class TouchGuardianService : Service() {
                 manager.notify(NOTIFICATION_ID, notification)
             }
             ACTION_FLUSH -> {
-                // Clear state
                 profiler.flush()
                 temporalFilter.flush()
+                blockedAnomalyCount = 0
+                lastAnomalySummary = "Cleared"
+                val notification = buildNotification(temporalFilter.isEnabled)
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(NOTIFICATION_ID, notification)
             }
             ACTION_STOP -> {
-                // Stop service
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -111,11 +119,41 @@ class TouchGuardianService : Service() {
         return START_STICKY
     }
 
+    fun handleAnomalyDetected(type: Byte, x: Float, y: Float, dwell: Int, reason: String) {
+        blockedAnomalyCount++
+        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+        lastAnomalySummary = "$reason at (${x.toInt()}, ${y.toInt()})"
+
+        // Trigger micro-haptic buzz
+        triggerHapticAlert()
+
+        // Update notification
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, buildNotification(temporalFilter.isEnabled))
+    }
+
+    private fun triggerHapticAlert() {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(45L)
+            }
+        } catch (_: Exception) {}
+    }
+
     @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_RUNNING_LOW || level >= TRIM_MEMORY_BACKGROUND) {
-            // Purge memory
             profiler.flush()
             temporalFilter.flush()
         }
@@ -146,7 +184,15 @@ class TouchGuardianService : Service() {
         )
 
         val profileTitle = profiler.profile.title
-        val statusText = if (isActive) "$profileTitle Active" else getString(R.string.status_paused)
+        val statusText = if (isActive) {
+            if (blockedAnomalyCount > 0) {
+                "Active • $blockedAnomalyCount Caught ($lastAnomalySummary)"
+            } else {
+                "$profileTitle Active • Live Touch Protection"
+            }
+        } else {
+            getString(R.string.status_paused)
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))

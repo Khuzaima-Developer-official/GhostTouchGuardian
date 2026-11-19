@@ -23,15 +23,15 @@ class TemporalFilterTest {
         val fingerReleaseTime = 1000L
         filter.registerValidFingerRelease(fingerReleaseTime)
 
-        // Stray ghost pulse arrives 25ms after finger release (within 45ms window)
-        val ghostArrivalTime = 1025L
+        // Stray ghost pulse arrives 10ms after finger release (within 2-18ms dielectric collapse window)
+        val ghostArrivalTime = 1010L
         val shouldSuppress = filter.shouldSuppressTouch(
             eventTime = ghostArrivalTime,
             isDown = true,
             isStylus = false
         )
 
-        assertTrue("Ghost echo inside 45ms cooldown window must be suppressed", shouldSuppress)
+        assertTrue("Ghost echo inside 2-18ms cooldown window must be suppressed", shouldSuppress)
     }
 
     @Test
@@ -114,5 +114,24 @@ class TemporalFilterTest {
         )
 
         assertFalse("Rapid tap on different button (>45px away) must NEVER be suppressed", shouldSuppress)
+    }
+
+    @Test
+    fun testHardClickFiftyMsIsNeverSuppressed() {
+        filter.registerValidFingerRelease(1000L, 100f, 100f)
+
+        // User does a hard click 50ms later with physical pressure/area
+        val clickTime = 1050L
+        val shouldSuppress = filter.shouldSuppressTouch(
+            eventTime = clickTime,
+            isDown = true,
+            isStylus = false,
+            x = 100f,
+            y = 100f,
+            touchSize = 0.04f,
+            touchMajor = 35f
+        )
+
+        assertFalse("50ms hard click must NEVER be suppressed", shouldSuppress)
     }
 }

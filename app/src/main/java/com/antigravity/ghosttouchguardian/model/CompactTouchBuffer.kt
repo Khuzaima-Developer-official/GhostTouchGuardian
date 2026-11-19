@@ -51,7 +51,7 @@ class CompactTouchBuffer(val capacity: Int = 128) {
 
         // Increment stats
         when (type) {
-            TYPE_GHOST_IDLE -> totalGhostCount++
+            TYPE_GHOST_IDLE, TYPE_GHOST_TELEPORT -> totalGhostCount++
             TYPE_GHOST_ECHO -> {
                 totalGhostCount++
                 totalEchoCount++
@@ -85,5 +85,6 @@ class CompactTouchBuffer(val capacity: Int = 128) {
         const val TYPE_GHOST_ECHO: Byte = 2
         const val TYPE_SPEN: Byte = 3
         const val TYPE_HUMAN_FAST_TAP: Byte = 4
+        const val TYPE_GHOST_TELEPORT: Byte = 5
     }
 }
