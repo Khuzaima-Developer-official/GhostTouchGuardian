@@ -72,11 +72,11 @@ Experiencing frustrating phantom touches, erratic cursor jumps, or trailing clic
 
 ### 5. Technical Specifications:
 - **Package Name:** `com.antigravity.ghosttouchguardian`
-- **Version:** `1.1.0` (Version Code: `2`)
+- **Version:** `1.2.0` (Version Code: `3`)
 - **Target SDK:** Android 15 (API 35)
 - **Minimum SDK:** Android 8.0 (API 26+)
 - **Architecture:** Universal (ARM64-v8a, armeabi-v7a, x86_64)
-- **APK Size:** ~1.44 MB (Signed with v2 signature scheme)
+- **APK Size:** ~1.48 MB (Signed with v2 signature scheme)
 
 ---
 
