@@ -2,11 +2,12 @@ package com.antigravity.ghosttouchguardian.model
 
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
  * A single recorded ghost touch sample with all 12-factor dimensions.
- * Captured during Identify Mode where every touch is assumed ghost.
+ * Captured during Identify Mode where phantom touches are profiled.
  */
 data class GhostTouchEntry(
     val x: Float,
@@ -16,15 +17,17 @@ data class GhostTouchEntry(
     val pressure: Float,
     val touchMajor: Float,
     val historySize: Int,
-    val accelDelta: Float,        // Accelerometer Z-delta at touch time (0 = no shockwave)
-    val intervalFromPrevMs: Long, // ms since previous ghost touch
-    val displacementPx: Float,    // px distance from previous ghost touch
+    val accelDelta: Float,        // Accelerometer delta magnitude at touch time (0 = no shockwave)
+    val intervalFromPrevMs: Long, // ms since previous touch
+    val displacementPx: Float,    // px distance from previous touch
     val timestamp: Long,
-    val factorNotes: String = "" // e.g. "periodic, inHotspot"
+    val timeSinceFingerMs: Long = -1L, // ms since human finger tap stimulus
+    val velocityPxPerMs: Float = if (intervalFromPrevMs > 0) displacementPx / intervalFromPrevMs else 0f,
+    val factorNotes: String = ""  // e.g. "postFingerGlitch(120ms), spark, noShockwave"
 )
 
 /**
- * A custom rule the user manually added on top of the learned fingerprint.
+ * A custom block rule manually configured or derived from a specific screen zone.
  */
 data class CustomBlockRule(
     val description: String,
@@ -40,82 +43,121 @@ data class CustomBlockRule(
 }
 
 /**
- * Statistical ghost fingerprint derived from all GhostTouchEntry samples.
- * Used by TouchProfilerEngine for multi-dimensional ghost matching.
+ * Statistical 12-Factor Ghost Fingerprint model.
+ * Profiles device-specific electrical glitch signatures for precision blocking.
  */
 data class GhostFingerprint(
     val entries: List<GhostTouchEntry>,
-    // Spatial
+    // Factor 1: Spatial Centroid & Variance
     val avgX: Float,
     val avgY: Float,
     val xStdDev: Float,
     val yStdDev: Float,
-    // Dwell
+    // Factor 2: Dwell Time Envelope
     val avgDwell: Float,
     val dwellStdDev: Float,
-    // Size
+    // Factor 3: Contact Surface Patch
     val avgSize: Float,
     val sizeStdDev: Float,
-    // Pressure
+    // Factor 4: Contact Force Gradient
     val avgPressure: Float,
-    // Period
+    // Factor 5: Physical Momentum (Accelerometer Delta)
+    val avgAccelDelta: Float,
+    // Factor 6: Digitizer Historical Vector Depth
+    val avgHistorySize: Float,
+    // Factor 7: Hardware Clock Periodicity
     val avgPeriodMs: Long,
     val periodVariance: Float,
-    // Extra
-    val avgAccelDelta: Float,
-    val avgHistorySize: Float,
-    // User rules
+    // Factor 8: Post-Finger Trailing Echo Delay
+    val avgPostFingerDelayMs: Long,
+    val postFingerEchoCount: Int,
+    // Factor 9: Touch Major Axis
+    val avgTouchMajor: Float,
+    // Factor 10: Kinematic Velocity Jump Limit
+    val maxVelocity: Float,
+    // User Rules
     val customBlockRules: List<CustomBlockRule>
 ) {
-    /** True if this fingerprint has enough data to be useful (at least 3 entries). */
     val isValid: Boolean get() = entries.size >= 3
 
     /**
-     * Returns a [0..1] probability that the given touch matches this ghost fingerprint.
-     * Score >= 0.6 is considered a ghost match.
+     * Comprehensive 12-Factor Matching Algorithm.
+     * Evaluates incoming touch across physical, biological, and temporal dimensions.
+     * Returns a [0..1] probability score. Score >= 0.55 confirms a ghost match.
      */
-    fun matchScore(x: Float, y: Float, dwell: Int, size: Float, pressure: Float, accelDelta: Float): Float {
+    fun matchScore(
+        x: Float,
+        y: Float,
+        dwell: Int,
+        size: Float,
+        pressure: Float,
+        accelDelta: Float,
+        historySize: Int = 0,
+        timeSinceFingerMs: Long = -1L,
+        intervalFromPrevMs: Long = -1L
+    ): Float {
         if (!isValid) return 0f
         var score = 0f
         var total = 0f
 
-        // Factor 1: Dwell within mean ± 2.5σ
-        total += 1f
-        val dwellRange = (dwellStdDev * 2.5f).coerceAtLeast(20f)
-        if (kotlin.math.abs(dwell - avgDwell) <= dwellRange) score += 1f
+        // Factor 1: Newtonian Momentum (absent in capacitive noise)
+        total += 2.0f
+        if (accelDelta < 0.04f) score += 2.0f
+        else if (accelDelta < 0.08f) score += 1.0f
 
-        // Factor 2: Size within profile range
-        total += 1f
-        val sizeRange = (sizeStdDev * 2.5f).coerceAtLeast(0.03f)
-        if (kotlin.math.abs(size - avgSize) <= sizeRange) score += 1f
+        // Factor 2: Biological Contact Flesh Patch (ghosts are sub-flesh)
+        total += 1.5f
+        val sizeMax = (avgSize + sizeStdDev * 2.5f).coerceAtLeast(0.035f)
+        if (size <= sizeMax) score += 1.5f
 
-        // Factor 3: Spatial proximity to ghost centroid (within 150px)
-        total += 1f
-        val dx = x - avgX; val dy = y - avgY
+        // Factor 3: Contact Pressure (ghosts have near-zero physical force)
+        total += 1.5f
+        if (pressure <= 0.12f) score += 1.5f
+        else if (pressure <= 0.20f) score += 0.5f
+
+        // Factor 4: Dwell Time distribution
+        total += 1.5f
+        val dwellRange = (dwellStdDev * 2.5f).coerceAtLeast(25f)
+        if (abs(dwell - avgDwell) <= dwellRange) score += 1.5f
+        else if (dwell <= 40) score += 1.0f // Electrical spark fallback
+
+        // Factor 5: Spatial Proximity to Ghost Centroid or Cluster
+        total += 1.5f
+        val dx = x - avgX
+        val dy = y - avgY
         val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-        if (dist <= 150f) score += 1f * (1f - dist / 150f)
+        val spatialRadius = ((xStdDev + yStdDev) * 2.0f).coerceIn(120f, 350f)
+        if (dist <= spatialRadius) {
+            score += 1.5f * (1f - dist / spatialRadius)
+        }
 
-        // Factor 4: Near-zero accel delta (no shockwave = ghost indicator)
-        total += 1f
-        if (accelDelta < 0.08f) score += 1f
+        // Factor 6: Digitizer Batch Trajectory (ghosts enter and exit in single sub-sample)
+        total += 1.0f
+        if (historySize == 0) score += 1.0f
 
-        // Factor 5: Low pressure (ghost = usually 0.0–0.15)
-        total += 1f
-        if (pressure <= 0.18f) score += 1f
+        // Factor 7: Hardware Clock Periodicity
+        if (avgPeriodMs in 10L..3000L && periodVariance < 15f && intervalFromPrevMs > 0L) {
+            total += 1.5f
+            val tol = (avgPeriodMs * 0.15f).coerceAtLeast(15f)
+            if (abs(intervalFromPrevMs - avgPeriodMs) <= tol) score += 1.5f
+        }
+
+        // Factor 8: Post-Finger Trailing Echo Timing
+        if (timeSinceFingerMs in 2L..800L && postFingerEchoCount > 0) {
+            total += 1.5f
+            score += 1.5f
+        }
 
         return score / total
     }
 
     companion object {
-        /**
-         * Build a GhostFingerprint from a list of raw entries.
-         * This computes all statistical parameters automatically.
-         */
         fun fromEntries(entries: List<GhostTouchEntry>, customRules: List<CustomBlockRule> = emptyList()): GhostFingerprint {
             if (entries.isEmpty()) return empty()
 
-            fun List<Float>.mean() = sum() / size
+            fun List<Float>.mean() = if (isEmpty()) 0f else sum() / size
             fun List<Float>.stdDev(): Float {
+                if (size < 2) return 0f
                 val m = mean()
                 return sqrt(map { (it - m) * (it - m) }.sum() / size).toFloat()
             }
@@ -127,14 +169,20 @@ data class GhostFingerprint(
             val pressures = entries.map { it.pressure }
             val accels = entries.map { it.accelDelta }
             val histories = entries.map { it.historySize.toFloat() }
+            val majors = entries.map { it.touchMajor }
+            val vels = entries.map { it.velocityPxPerMs }
 
             // Period stats
             val intervals = entries.map { it.intervalFromPrevMs }.filter { it in 5L..5000L }
             val avgPeriod = if (intervals.isEmpty()) 0L else (intervals.sum() / intervals.size)
             val periodVariance = if (intervals.size < 2 || avgPeriod == 0L) 100f else {
-                val diffs = intervals.map { kotlin.math.abs(it - avgPeriod).toFloat() }
+                val diffs = intervals.map { abs(it - avgPeriod).toFloat() }
                 (diffs.sum() / diffs.size / avgPeriod * 100f)
             }
+
+            // Post-finger echo latency
+            val postFingerDelays = entries.map { it.timeSinceFingerMs }.filter { it in 2L..1500L }
+            val avgPostFingerDelay = if (postFingerDelays.isEmpty()) 0L else (postFingerDelays.sum() / postFingerDelays.size)
 
             return GhostFingerprint(
                 entries = entries,
@@ -147,10 +195,14 @@ data class GhostFingerprint(
                 avgSize = sizes.mean(),
                 sizeStdDev = sizes.stdDev(),
                 avgPressure = pressures.mean(),
-                avgPeriodMs = avgPeriod,
-                periodVariance = periodVariance,
                 avgAccelDelta = accels.mean(),
                 avgHistorySize = histories.mean(),
+                avgPeriodMs = avgPeriod,
+                periodVariance = periodVariance,
+                avgPostFingerDelayMs = avgPostFingerDelay,
+                postFingerEchoCount = postFingerDelays.size,
+                avgTouchMajor = majors.mean(),
+                maxVelocity = if (vels.isEmpty()) 0f else vels.maxOrNull() ?: 0f,
                 customBlockRules = customRules
             )
         }
@@ -161,8 +213,10 @@ data class GhostFingerprint(
             avgDwell = 0f, dwellStdDev = 0f,
             avgSize = 0f, sizeStdDev = 0f,
             avgPressure = 0f,
-            avgPeriodMs = 0L, periodVariance = 100f,
             avgAccelDelta = 0f, avgHistorySize = 0f,
+            avgPeriodMs = 0L, periodVariance = 100f,
+            avgPostFingerDelayMs = 0L, postFingerEchoCount = 0,
+            avgTouchMajor = 0f, maxVelocity = 0f,
             customBlockRules = emptyList()
         )
 
@@ -179,14 +233,17 @@ data class GhostFingerprint(
             root.put("avgSize", fp.avgSize)
             root.put("sizeStdDev", fp.sizeStdDev)
             root.put("avgPressure", fp.avgPressure)
-            root.put("avgPeriodMs", fp.avgPeriodMs)
-            root.put("periodVariance", fp.periodVariance)
             root.put("avgAccelDelta", fp.avgAccelDelta)
             root.put("avgHistorySize", fp.avgHistorySize)
+            root.put("avgPeriodMs", fp.avgPeriodMs)
+            root.put("periodVariance", fp.periodVariance)
+            root.put("avgPostFingerDelayMs", fp.avgPostFingerDelayMs)
+            root.put("postFingerEchoCount", fp.postFingerEchoCount)
+            root.put("avgTouchMajor", fp.avgTouchMajor)
+            root.put("maxVelocity", fp.maxVelocity)
 
-            // Entries (last 50 only to keep storage small)
             val entriesArr = JSONArray()
-            fp.entries.takeLast(50).forEach { e ->
+            fp.entries.takeLast(60).forEach { e ->
                 val ej = JSONObject()
                 ej.put("x", e.x); ej.put("y", e.y)
                 ej.put("dwell", e.dwell)
@@ -197,12 +254,13 @@ data class GhostFingerprint(
                 ej.put("intervalFromPrevMs", e.intervalFromPrevMs)
                 ej.put("displacementPx", e.displacementPx)
                 ej.put("timestamp", e.timestamp)
+                ej.put("timeSinceFingerMs", e.timeSinceFingerMs)
+                ej.put("velocityPxPerMs", e.velocityPxPerMs)
                 ej.put("factorNotes", e.factorNotes)
                 entriesArr.put(ej)
             }
             root.put("entries", entriesArr)
 
-            // Custom rules
             val rulesArr = JSONArray()
             fp.customBlockRules.forEach { r ->
                 val rj = JSONObject()
@@ -230,12 +288,14 @@ data class GhostFingerprint(
                         dwell = ej.getInt("dwell"),
                         size = ej.getDouble("size").toFloat(),
                         pressure = ej.getDouble("pressure").toFloat(),
-                        touchMajor = ej.getDouble("touchMajor").toFloat(),
-                        historySize = ej.getInt("historySize"),
+                        touchMajor = ej.optDouble("touchMajor", 0.0).toFloat(),
+                        historySize = ej.optInt("historySize", 0),
                         accelDelta = ej.getDouble("accelDelta").toFloat(),
                         intervalFromPrevMs = ej.getLong("intervalFromPrevMs"),
                         displacementPx = ej.getDouble("displacementPx").toFloat(),
                         timestamp = ej.getLong("timestamp"),
+                        timeSinceFingerMs = ej.optLong("timeSinceFingerMs", -1L),
+                        velocityPxPerMs = ej.optDouble("velocityPxPerMs", 0.0).toFloat(),
                         factorNotes = ej.optString("factorNotes", "")
                     )
                 }
@@ -253,22 +313,25 @@ data class GhostFingerprint(
                     )
                 }
 
-                // Rebuild stats from stored values (or recompute from entries)
                 GhostFingerprint(
                     entries = entries,
-                    avgX = root.getDouble("avgX").toFloat(),
-                    avgY = root.getDouble("avgY").toFloat(),
-                    xStdDev = root.getDouble("xStdDev").toFloat(),
-                    yStdDev = root.getDouble("yStdDev").toFloat(),
-                    avgDwell = root.getDouble("avgDwell").toFloat(),
-                    dwellStdDev = root.getDouble("dwellStdDev").toFloat(),
-                    avgSize = root.getDouble("avgSize").toFloat(),
-                    sizeStdDev = root.getDouble("sizeStdDev").toFloat(),
-                    avgPressure = root.getDouble("avgPressure").toFloat(),
-                    avgPeriodMs = root.getLong("avgPeriodMs"),
-                    periodVariance = root.getDouble("periodVariance").toFloat(),
-                    avgAccelDelta = root.getDouble("avgAccelDelta").toFloat(),
-                    avgHistorySize = root.getDouble("avgHistorySize").toFloat(),
+                    avgX = root.optDouble("avgX", 0.0).toFloat(),
+                    avgY = root.optDouble("avgY", 0.0).toFloat(),
+                    xStdDev = root.optDouble("xStdDev", 0.0).toFloat(),
+                    yStdDev = root.optDouble("yStdDev", 0.0).toFloat(),
+                    avgDwell = root.optDouble("avgDwell", 0.0).toFloat(),
+                    dwellStdDev = root.optDouble("dwellStdDev", 0.0).toFloat(),
+                    avgSize = root.optDouble("avgSize", 0.0).toFloat(),
+                    sizeStdDev = root.optDouble("sizeStdDev", 0.0).toFloat(),
+                    avgPressure = root.optDouble("avgPressure", 0.0).toFloat(),
+                    avgAccelDelta = root.optDouble("avgAccelDelta", 0.0).toFloat(),
+                    avgHistorySize = root.optDouble("avgHistorySize", 0.0).toFloat(),
+                    avgPeriodMs = root.optLong("avgPeriodMs", 0L),
+                    periodVariance = root.optDouble("periodVariance", 100.0).toFloat(),
+                    avgPostFingerDelayMs = root.optLong("avgPostFingerDelayMs", 0L),
+                    postFingerEchoCount = root.optInt("postFingerEchoCount", 0),
+                    avgTouchMajor = root.optDouble("avgTouchMajor", 0.0).toFloat(),
+                    maxVelocity = root.optDouble("maxVelocity", 0.0).toFloat(),
                     customBlockRules = rules
                 )
             } catch (e: Exception) {

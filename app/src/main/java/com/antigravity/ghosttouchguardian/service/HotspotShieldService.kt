@@ -164,9 +164,10 @@ class HotspotShieldService : Service() {
             } catch (_: Exception) {}
         }
 
-        // Reset timer on every human tap so user can comfortably tap or type continuously
+        // Quick 500ms unlock window: enough for human tap/double-tap to pass,
+        // but immediately re-arms before trailing post-finger ghost echoes can escape!
         handler.removeCallbacks(reArmRunnable)
-        handler.postDelayed(reArmRunnable, 3000L) // 3 seconds uninterrupted touch-through
+        handler.postDelayed(reArmRunnable, 500L)
     }
 
     private fun reArmShield() {
