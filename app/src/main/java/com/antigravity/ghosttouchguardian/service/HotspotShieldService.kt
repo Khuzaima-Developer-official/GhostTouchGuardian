@@ -76,6 +76,15 @@ class HotspotShieldService : Service() {
                 removeOverlay()
                 stopSelf()
             }
+            ACTION_PAUSE -> {
+                removeOverlay()
+            }
+            ACTION_RESUME -> {
+                refreshZones()
+                if (checkOverlayPermission()) {
+                    attachOverlay()
+                }
+            }
             ACTION_REFRESH_ZONES -> {
                 refreshZones()
                 removeOverlay()
@@ -214,10 +223,19 @@ class HotspotShieldService : Service() {
             strokeWidth = 2f
         }
 
+        // State for deferred ghost classification (ACTION_DOWN -> ACTION_UP pipeline)
+        private var pendingDownTime: Long = 0L
+        private var pendingDownSize: Float = 0f
+        private var pendingDownPressure: Float = 0f
+        private var pendingDownShockwave: Boolean = false
+        private var pendingIsHuman: Boolean = false
+
+        // Post-Stylus electrostatic burst tracking
+        private var lastStylusUpTime: Long = 0L
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             if (isTouchThrough) return
-            // Draw targeted shield zone
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), boxPaint)
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), borderPaint)
         }
@@ -225,22 +243,110 @@ class HotspotShieldService : Service() {
         override fun onTouchEvent(event: MotionEvent): Boolean {
             if (isTouchThrough) return false
 
-            // Multi-Factor Human Verification
-            val hasShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 80L)
-            val isFleshyContact = event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
-            val isHuman = hasShockwave || isFleshyContact
-
-            if (isHuman) {
-                // REAL FINGER TAP: Unlock shield immediately for 3 seconds so tap reaches underlying app effortlessly!
+            // S Pen Bypass & Post-Stylus Burst Tracking
+            if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS) {
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    lastStylusUpTime = event.eventTime
+                }
                 passThroughTemporarily()
                 return false
             }
 
-            // GHOST TOUCH CONFIRMED: Zero shockwave AND zero flesh size -> SWALLOW IT!
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    // Classify at DOWN only for quick human unlock — but ALWAYS pass through DOWN
+                    // so the underlying app sees ACTION_DOWN and scrolls work normally.
+                    pendingDownTime = event.eventTime
+                    pendingDownSize = event.size
+                    pendingDownPressure = event.pressure
+                    pendingDownShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 80L)
+                    pendingIsHuman = pendingDownShockwave ||
+                            event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
+
+                    if (pendingIsHuman) {
+                        // Real finger confirmed at DOWN — unlock immediately
+                        passThroughTemporarily()
+                    }
+                    // ALWAYS return false on ACTION_DOWN so scroll gestures start normally
+                    return false
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    // NEVER consume MOVE — this is what breaks scrolling
+                    // If we were in pass-through, stay pass-through
+                    if (!pendingIsHuman) {
+                        // Check again on MOVE in case shockwave arrives late (device vibration propagation delay)
+                        val nowShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 100L)
+                        if (nowShockwave) {
+                            pendingIsHuman = true
+                            passThroughTemporarily()
+                        }
+                    }
+                    return false
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    val dwell = (event.eventTime - pendingDownTime).toInt()
+
+                    // Final shockwave check at ACTION_UP window too
+                    val finalShockwave = pendingDownShockwave ||
+                            impulseSensor.hasMechanicalImpulse(pendingDownTime, windowMs = 120L)
+
+                    // Final fleshy check — also include UP event's fresh size/pressure reading
+                    val finalIsHuman = pendingIsHuman || finalShockwave ||
+                            event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
+
+                    // Check S Pen electrostatic discharge burst (zero shockwave, within 1.5s of stylus lift)
+                    val timeSinceStylus = if (lastStylusUpTime > 0L) pendingDownTime - lastStylusUpTime else -1L
+                    val isPostStylusEcho = timeSinceStylus in 2L..1500L
+
+                    if (isPostStylusEcho && !finalShockwave && dwell <= 90) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        val cancelEvent = MotionEvent.obtain(event).also {
+                            it.action = MotionEvent.ACTION_CANCEL
+                        }
+                        try {
+                            super.onTouchEvent(cancelEvent)
+                        } catch (_: Exception) {}
+                        cancelEvent.recycle()
+                        return true
+                    }
+
+                    if (finalIsHuman) {
+                        // Human confirmed — ensure pass-through is active, let UP through
+                        if (!isTouchThrough) passThroughTemporarily()
+                        return false
+                    }
+
+                    // Ghost confirmed: zero shockwave + sub-45ms dwell + zero flesh contact
+                    // Ghost touches always have dwell <= 110ms. Longer = human long-press.
+                    if (dwell <= 110) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        // Suppress the UP — the underlying app already received ACTION_DOWN
+                        // but we inject ACTION_CANCEL to roll back its gesture state
+                        val cancelEvent = MotionEvent.obtain(event).also {
+                            it.action = MotionEvent.ACTION_CANCEL
+                        }
+                        try {
+                            super.onTouchEvent(cancelEvent)
+                        } catch (_: Exception) {}
+                        cancelEvent.recycle()
+                        return true // Swallow the ghost ACTION_UP
+                    }
+
+                    // Dwell > 110ms with no shockwave = human long-press with low pressure sensor
+                    // Let it pass safely
+                    if (!isTouchThrough) passThroughTemporarily()
+                    return false
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
+                    pendingIsHuman = false
+                    return false
+                }
             }
-            return true
+
+            return false
         }
     }
 
@@ -248,5 +354,7 @@ class HotspotShieldService : Service() {
         const val ACTION_START = "com.antigravity.guardian.SHIELD_START"
         const val ACTION_STOP = "com.antigravity.guardian.SHIELD_STOP"
         const val ACTION_REFRESH_ZONES = "com.antigravity.guardian.SHIELD_REFRESH"
+        const val ACTION_PAUSE = "com.antigravity.guardian.SHIELD_PAUSE"
+        const val ACTION_RESUME = "com.antigravity.guardian.SHIELD_RESUME"
     }
 }

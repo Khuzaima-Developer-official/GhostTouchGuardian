@@ -1,5 +1,6 @@
 package com.antigravity.ghosttouchguardian.ui
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Bundle
@@ -63,6 +64,11 @@ class GhostIdentifyActivity : AppCompatActivity() {
 
         prefs = GuardianPreferences(this)
         impulseSensor = MechanicalImpulseSensor(this).also { it.start() }
+
+        // Pause background shield during identify mode so all touches can be detected freely
+        startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+            action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_PAUSE
+        })
 
         lockImmersive()
 
@@ -155,7 +161,17 @@ class GhostIdentifyActivity : AppCompatActivity() {
             return super.dispatchTouchEvent(event)
         }
 
-        if (!scanActive) return super.dispatchTouchEvent(event)
+        if (!scanActive) {
+            // When scan is not active (setup screen or result panel), shield UI buttons from ghost clicks!
+            // Any touch with zero mechanical shockwave, low pressure, and tiny size is an unwanted phantom:
+            val hasShockwave = impulseSensor?.hasMechanicalImpulse(event.eventTime, windowMs = 80L) ?: false
+            val isFlesh = event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
+            if (!hasShockwave && !isFlesh) {
+                // Swallow phantom touch so it cannot click buttons automatically
+                return true
+            }
+            return super.dispatchTouchEvent(event)
+        }
 
         // 2. Safe Spot & Human Finger Detection
         val safeSpotBounds = binding.cardFingerSafeSpot.let {
@@ -261,15 +277,24 @@ class GhostIdentifyActivity : AppCompatActivity() {
         if (fingerprint.isValid) {
             val postFingerCount = recordedEntries.count { it.timeSinceFingerMs in 2L..800L }
 
+            // Auto-arm and activate Hotspot Shield immediately upon mode completion!
+            prefs.ghostFingerprintJson = GhostFingerprint.toJson(fingerprint)
+            prefs.isGhostFingerprintEnabled = true
+            prefs.isHotspotShieldEnabled = true
+            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+            })
+
             binding.tvResultSummary.text = buildString {
                 append("✅ ${recordedEntries.size} Glitches Analyzed ($postFingerCount post-finger)\n\n")
                 append("📍 Glitch Centroid: (${fingerprint.avgX.toInt()}, ${fingerprint.avgY.toInt()})\n")
                 append("⏱ Glitch Pulse:     ${String.format("%.1f", fingerprint.avgDwell)}ms\n")
                 append("⚡ Tap Momentum:     ${String.format("%.4f", fingerprint.avgAccelDelta)} m/s² (Zero mass)\n")
                 append("🔄 Post-Finger Echo: ${if (fingerprint.avgPostFingerDelayMs > 0) "${fingerprint.avgPostFingerDelayMs}ms latency" else "None"}\n\n")
-                append("All 4 core invariants locked. Shield will block matching phantoms.")
+                append("🛡 Shield is ACTIVE & Blocking Ghosts Continuously.")
             }
             binding.btnSaveFingerprint.visibility = View.VISIBLE
+            binding.btnSaveFingerprint.text = "Finish & Return"
             binding.btnDiscardScan.text = "Discard & Rescan"
         } else {
             binding.tvResultSummary.text = "⚠️ Need at least 3 ghost touches to lock glitch profile (${recordedEntries.size}/3). Please tap the Safe Spot to provoke post-touch glitches."
@@ -302,5 +327,12 @@ class GhostIdentifyActivity : AppCompatActivity() {
         super.onDestroy()
         countDownTimer?.cancel()
         impulseSensor?.stop()
+
+        // Resume Hotspot Shield service upon exiting Identify Mode
+        if (prefs.isHotspotShieldEnabled) {
+            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+            })
+        }
     }
 }

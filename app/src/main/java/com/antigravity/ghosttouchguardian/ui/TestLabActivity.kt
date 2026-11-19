@@ -1,5 +1,6 @@
 package com.antigravity.ghosttouchguardian.ui
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.widget.Toast
@@ -52,6 +53,11 @@ class TestLabActivity : AppCompatActivity() {
 
         prefs = GuardianPreferences(this)
         impulseSensor = MechanicalImpulseSensor(this).also { it.start() }
+
+        // Pause background shield during Test Lab so touches reach canvas directly
+        startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+            action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_PAUSE
+        })
 
         lockImmersiveMode()
 
@@ -209,5 +215,12 @@ class TestLabActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         impulseSensor?.stop()
+
+        // Resume Hotspot Shield service upon exiting Test Lab
+        if (prefs.isHotspotShieldEnabled) {
+            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+            })
+        }
     }
 }

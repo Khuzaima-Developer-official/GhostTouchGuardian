@@ -312,4 +312,42 @@ class TouchProfilerEngineTest {
 
         assertEquals(CompactTouchBuffer.TYPE_GHOST_IDLE, result)
     }
+
+    @Test
+    fun testSPenDischargeEchoIsDetectedAndBlocked() {
+        // 1. Stylus writes and lifts at t=15000L
+        engine.processTouch(
+            action = MotionEvent.ACTION_DOWN,
+            toolType = MotionEvent.TOOL_TYPE_STYLUS,
+            x = 400f, y = 600f,
+            eventTime = 15000L
+        )
+        val stylusResult = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            toolType = MotionEvent.TOOL_TYPE_STYLUS,
+            x = 400f, y = 600f,
+            eventTime = 15100L,
+            downTime = 15000L
+        )
+        assertEquals(CompactTouchBuffer.TYPE_SPEN, stylusResult)
+
+        // 2. Trailing electrostatic burst occurs 250ms after stylus removal, without shockwave
+        engine.processTouch(
+            action = MotionEvent.ACTION_DOWN,
+            toolType = MotionEvent.TOOL_TYPE_FINGER,
+            x = 405f, y = 602f,
+            eventTime = 15350L
+        )
+        val echoResult = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            toolType = MotionEvent.TOOL_TYPE_FINGER,
+            x = 405f, y = 602f,
+            eventTime = 15380L,
+            downTime = 15350L,
+            forcedImpulse = false
+        )
+
+        assertEquals(CompactTouchBuffer.TYPE_GHOST_ECHO, echoResult)
+        assertEquals(1L, engine.buffer.totalGhostCount)
+    }
 }

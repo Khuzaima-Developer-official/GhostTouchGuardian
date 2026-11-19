@@ -35,6 +35,11 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     private var lastHumanUpY: Float = -1f
     private var lastAnyUpTime: Long = 0L
 
+    // S Pen discharge tracking — post-stylus electrostatic echo suppression
+    private var lastStylusUpTime: Long = 0L
+    private var lastStylusUpX: Float = -1f
+    private var lastStylusUpY: Float = -1f
+
     // Touch down tracking
     private var lastDownTime: Long = 0L
     private var downX: Float = 0f
@@ -88,12 +93,17 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     ): Byte {
         // Stylus bypass
         if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
-            if (action == MotionEvent.ACTION_UP && !isGhostOnlyMode) {
-                buffer.push(
-                    x, y, eventTime,
-                    (eventTime - downTime).toInt(),
-                    size, pressure, CompactTouchBuffer.TYPE_SPEN
-                )
+            if (action == MotionEvent.ACTION_UP) {
+                lastStylusUpTime = eventTime
+                lastStylusUpX = x
+                lastStylusUpY = y
+                if (!isGhostOnlyMode) {
+                    buffer.push(
+                        x, y, eventTime,
+                        (eventTime - downTime).toInt(),
+                        size, pressure, CompactTouchBuffer.TYPE_SPEN
+                    )
+                }
             }
             return CompactTouchBuffer.TYPE_SPEN
         }
@@ -183,6 +193,10 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 val isFleshyHuman = (size >= 0.04f && pressure >= 0.12f) || pointerCount > 1
                 val isHumanConfirmed = if (forcedImpulse == false) false else (hasImpulse || isFleshyHuman)
 
+                // Check post-stylus electrostatic discharge echo
+                val timeSinceStylusMs = if (lastStylusUpTime > 0L) lastDownTime - lastStylusUpTime else -1L
+                val isSPenDischargeEcho = timeSinceStylusMs in 2L..1500L
+
                 // Check hotspot
                 val inHotspot = calibratedHotspots.any { it.contains(x, y) }
 
@@ -218,6 +232,10 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                     isCurrentTouchEcho -> {
                         type = CompactTouchBuffer.TYPE_GHOST_ECHO
                         factorReason = "Dielectric Echo (${deltaSinceLastUp}ms post-lift)"
+                    }
+                    isSPenDischargeEcho && !isHumanConfirmed && dwell <= 70 -> {
+                        type = CompactTouchBuffer.TYPE_GHOST_ECHO
+                        factorReason = "S Pen Static Echo (${timeSinceStylusMs}ms post-pen)"
                     }
                     isStaticLockDetected -> {
                         type = CompactTouchBuffer.TYPE_STATIC_LOCK
@@ -298,6 +316,9 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
         lastHumanUpTime = 0L
         lastHumanUpX = -1f
         lastHumanUpY = -1f
+        lastStylusUpTime = 0L
+        lastStylusUpX = -1f
+        lastStylusUpY = -1f
         lastDownTime = 0L
         lastAnyDownTime = 0L
         lastAnyDownX = -1f

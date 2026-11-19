@@ -47,6 +47,11 @@ class CalibrationActivity : AppCompatActivity() {
         prefs = GuardianPreferences(this)
         lockImmersiveMode()
 
+        // Pause background shield during calibration mode so all phantom touches can be mapped
+        startService(Intent(this, HotspotShieldService::class.java).apply {
+            action = HotspotShieldService.ACTION_PAUSE
+        })
+
         // Disable back button — exit only via slide
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -140,6 +145,16 @@ class CalibrationActivity : AppCompatActivity() {
             return true  // Consume
         }
 
+        // When scan is complete, shield UI buttons against ghost touches
+        if (event != null && lastResult != null) {
+            val isFlesh = event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
+            val inGlitchZone = lastResult?.zones?.any { it.contains(event.x, event.y) } == true
+            if (!isFlesh && (inGlitchZone || event.actionMasked == MotionEvent.ACTION_DOWN)) {
+                // Block ghost touch from auto-clicking buttons!
+                return true
+            }
+        }
+
         // Allow setup UI touches (SeekBar, Start button)
         return super.dispatchTouchEvent(event)
     }
@@ -147,6 +162,21 @@ class CalibrationActivity : AppCompatActivity() {
     private fun finishScan() {
         val result = calibrationEngine.finishCalibration()
         lastResult = result
+
+        // Auto-arm and activate immediately upon scan completion
+        if (result.zones.isNotEmpty()) {
+            val json = GhostCalibrationEngine.serializeZonesToJson(result.zones)
+            prefs.savedHotspotsJson = json
+            prefs.calibratedAvgPeriodMs = result.avgPeriodMs
+            prefs.calibratedVariancePercent = result.periodVariancePercent
+            prefs.isHotspotShieldEnabled = true
+
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+                startService(Intent(this, HotspotShieldService::class.java).apply {
+                    action = HotspotShieldService.ACTION_START
+                })
+            }
+        }
 
         binding.tvCountdownTimer.visibility = View.GONE
         binding.tvCalibrationSubtitle.text = "Scan complete! ${result.zones.size} ghost zone(s) mapped."
@@ -156,9 +186,10 @@ class CalibrationActivity : AppCompatActivity() {
         val periodText = if (result.avgPeriodMs > 0) " • Period: ${result.avgPeriodMs}ms" else ""
 
         binding.tvCalibrationResult.visibility = View.VISIBLE
-        binding.tvCalibrationResult.text = "$zoneCount Ghost Zones Mapped ($tapCount phantom taps$periodText)"
+        binding.tvCalibrationResult.text = "$zoneCount Ghost Zones Mapped ($tapCount phantom taps$periodText)\n🛡 Shield is ACTIVE & Blocking."
 
         binding.btnSaveAndActivate.visibility = View.VISIBLE
+        binding.btnSaveAndActivate.text = "Finish & Return"
         binding.btnSaveAndActivate.setOnClickListener {
             saveAndActivate(result)
         }
@@ -195,5 +226,12 @@ class CalibrationActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         countDownTimer?.cancel()
+
+        // Resume Hotspot Shield service upon exiting Calibration Mode
+        if (prefs.isHotspotShieldEnabled) {
+            startService(Intent(this, HotspotShieldService::class.java).apply {
+                action = HotspotShieldService.ACTION_START
+            })
+        }
     }
 }
