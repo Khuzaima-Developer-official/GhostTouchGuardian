@@ -17,6 +17,18 @@ class TouchCanvasView @JvmOverloads constructor(
 ) : View(context, attrs, defStyleAttr) {
 
     var profiler: TouchProfilerEngine? = null
+    var hotspots: List<com.antigravity.ghosttouchguardian.engine.HotspotZone> = emptyList()
+
+    // Hotspot paints
+    private val hotspotBoxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x28FF1744.toInt()
+        style = Paint.Style.FILL
+    }
+    private val hotspotBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x88FF1744.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+    }
 
     // Valid green
     private val humanPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -122,6 +134,12 @@ class TouchCanvasView @JvmOverloads constructor(
             }
         }
 
+        // Draw hotspots
+        for (hz in hotspots) {
+            canvas.drawRect(hz.left, hz.top, hz.right, hz.bottom, hotspotBoxPaint)
+            canvas.drawRect(hz.left, hz.top, hz.right, hz.bottom, hotspotBorderPaint)
+        }
+
         if (count == 0) {
             if (isGhostOnly) {
                 canvas.drawText("FILTER ENGAGED", width / 2f, height / 2f - 20f, hintPaint)
@@ -169,6 +187,10 @@ class TouchCanvasView @JvmOverloads constructor(
                 CompactTouchBuffer.TYPE_GRID_COLINEAR -> {
                     canvas.drawCircle(x, y, radius * 1.3f, ghostIdlePaint)
                     drawPillLabel(canvas, "ITO SHORT ($dwell ms)", x, y, 0xFFFF1744.toInt())
+                }
+                CompactTouchBuffer.TYPE_GHOST_HOTSPOT -> {
+                    canvas.drawCircle(x, y, radius * 1.4f, ghostIdlePaint)
+                    drawPillLabel(canvas, "CALIBRATED GHOST ($dwell ms)", x, y, 0xFFFF1744.toInt())
                 }
                 CompactTouchBuffer.TYPE_SPEN -> {
                     canvas.drawCircle(x, y, 26f, spenPaint)

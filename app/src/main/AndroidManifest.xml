@@ -15,6 +15,9 @@
     <!-- Low latency haptic notification when ghost touch detected -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Active Shield Overlay for consuming phantom touches -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- Android 11+ package visibility for dialer + settings -->
     <queries>
         <intent>
@@ -53,6 +56,28 @@
             android:theme="@style/Theme.GhostTouchGuardian.Fullscreen"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:launchMode="singleTop" />
+
+        <!-- 15-Second Screen Auto-Calibration Activity -->
+        <activity
+            android:name=".ui.CalibrationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GhostTouchGuardian.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:launchMode="singleTop" />
+
+        <!-- Ghost Touch Identify & Learning Activity -->
+        <activity
+            android:name=".ui.GhostIdentifyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GhostTouchGuardian.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:launchMode="singleTop" />
+
+        <!-- Active Hotspot Shield Overlay Service -->
+        <service
+            android:name=".service.HotspotShieldService"
+            android:enabled="true"
+            android:exported="false" />
 
         <!-- Persistent, Ultra-low-overhead Guardian Service -->
         <service

@@ -52,7 +52,7 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Mode Selector Pills -->
+    <!-- 3 Testing Mode Selector Pills -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -60,34 +60,52 @@
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnModeGhostDetect"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="2dp"
+            android:layout_weight="1"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="Ghost Detect"
+            android:textColor="@color/text_secondary"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            app:cornerRadius="8dp"
+            app:strokeColor="@color/card_border"
+            app:strokeWidth="1dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnModeDiagnostic"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="0dp"
             android:layout_height="40dp"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:layout_weight="1.1"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:text="Diagnostic (All)"
+            android:text="Ghost &amp; Finger"
             android:textColor="@color/accent_cyan"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold"
             app:cornerRadius="8dp"
             app:strokeColor="@color/accent_cyan"
             app:strokeWidth="1dp" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnModeGhostOnly"
+            android:id="@+id/btnModeGhostBlock"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="0dp"
             android:layout_height="40dp"
-            android:layout_marginStart="4dp"
+            android:layout_marginStart="2dp"
             android:layout_weight="1"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:text="Ghost-Only Filter"
+            android:text="Ghost Block"
             android:textColor="@color/text_secondary"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold"
             app:cornerRadius="8dp"
             app:strokeColor="@color/card_border"

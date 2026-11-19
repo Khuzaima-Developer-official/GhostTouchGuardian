@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
 
         setupLevelSelectors()
         setupActions()
+        setupCalibrationCard()
         setupHardwareCard()
         renderActiveProfile(prefs.currentProfile)
     }
@@ -61,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // Refresh UI
         updateDashboard()
+        updateShieldButton()
         renderActiveProfile(prefs.currentProfile)
     }
 
@@ -233,6 +235,69 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Memory Purged (0 B active)", Toast.LENGTH_SHORT).show()
         }
 
+    }
+
+    private fun setupCalibrationCard() {
+        // Ghost Identify (Fingerprint Learning) click
+        binding.btnGhostIdentify.setOnClickListener {
+            startActivity(Intent(this, GhostIdentifyActivity::class.java))
+        }
+
+        // Calibration click
+        binding.btnAutoCalibrateScreen.setOnClickListener {
+            startActivity(Intent(this, CalibrationActivity::class.java))
+        }
+
+        // Shield toggle
+        binding.btnToggleHotspotShield.setOnClickListener {
+            val hasZones = prefs.savedHotspotsJson.isNotBlank()
+            val hasFp = prefs.ghostFingerprintJson.isNotBlank()
+            if (!hasZones && !hasFp) {
+                Toast.makeText(this, "Run Ghost Identify or Calibration first to learn ghost patterns!", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, GhostIdentifyActivity::class.java))
+                return@setOnClickListener
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                Toast.makeText(this, "Grant 'Appear on top' permission to enable Shield", Toast.LENGTH_LONG).show()
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+                return@setOnClickListener
+            }
+
+            prefs.isHotspotShieldEnabled = !prefs.isHotspotShieldEnabled
+            val shieldAction = if (prefs.isHotspotShieldEnabled) {
+                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+            } else {
+                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_STOP
+            }
+            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                action = shieldAction
+            })
+            updateShieldButton()
+        }
+    }
+
+    private fun updateShieldButton() {
+        // Update shield
+        val hasZones = prefs.savedHotspotsJson.isNotBlank()
+        val hasFp = prefs.ghostFingerprintJson.isNotBlank()
+        val zones = com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine.parseZonesFromJson(prefs.savedHotspotsJson)
+
+        if (prefs.isHotspotShieldEnabled && (hasZones || hasFp)) {
+            val guardDetails = if (hasFp) "Fingerprint & ${zones.size} Zones" else "${zones.size} Zones"
+            binding.btnToggleHotspotShield.text = "Hotspot Shield: ACTIVE ($guardDetails Guarded)"
+            binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
+            binding.btnToggleHotspotShield.strokeColor = ContextCompat.getColorStateList(this, R.color.valid_green)
+        } else {
+            val status = if (hasZones || hasFp) "Hotspot Shield: OFF (Ready to Activate)" else "Hotspot Shield: OFF (Not Calibrated)"
+            binding.btnToggleHotspotShield.text = status
+            binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, R.color.ghost_red))
+            binding.btnToggleHotspotShield.strokeColor = ContextCompat.getColorStateList(this, R.color.ghost_red)
+        }
     }
 
     private fun updateTestingAlertsButton() {

@@ -12,14 +12,38 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.antigravity.ghosttouchguardian.R
 import com.antigravity.ghosttouchguardian.data.GuardianPreferences
 import com.antigravity.ghosttouchguardian.databinding.ActivityTestLabBinding
+import com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine
 import com.antigravity.ghosttouchguardian.engine.TouchProfilerEngine
+import com.antigravity.ghosttouchguardian.model.GhostFingerprint
+import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
 import com.antigravity.ghosttouchguardian.service.TouchGuardianService
 
+/**
+ * Test Lab Activity — 3 Testing Modes (all temporary, for analysis only):
+ *
+ * MODE 1 — Ghost Touch Detect:
+ *   Every touch = ghost. Records fingerprint factors. Use this in GhostIdentifyActivity.
+ *   Here it shows with ghost markers (red) but doesn't block.
+ *
+ * MODE 2 — Ghost & Finger Touch (DIAGNOSTIC):
+ *   Shows both ghost (red) and human (green) classified by 12-factor engine.
+ *   The default diagnostic mode.
+ *
+ * MODE 3 — Ghost Touch Block:
+ *   Actively tests ghost blocking using calibrated fingerprint.
+ *   Ghost touches = consumed (not passed to canvas). Real finger = shown green.
+ *
+ * Exit: SLIDE ONLY (no back button).
+ */
 class TestLabActivity : AppCompatActivity() {
+
+    private enum class LabMode { GHOST_DETECT, DIAGNOSTIC, GHOST_BLOCK }
 
     private lateinit var binding: ActivityTestLabBinding
     private lateinit var engine: TouchProfilerEngine
     private lateinit var prefs: GuardianPreferences
+    private var impulseSensor: MechanicalImpulseSensor? = null
+    private var currentMode = LabMode.DIAGNOSTIC
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,22 +51,37 @@ class TestLabActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         prefs = GuardianPreferences(this)
+        impulseSensor = MechanicalImpulseSensor(this).also { it.start() }
 
         lockImmersiveMode()
 
+        // Block back button
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                Toast.makeText(this@TestLabActivity, "Slide bottom bar to exit", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@TestLabActivity, "Slide to exit →", Toast.LENGTH_SHORT).show()
             }
         })
 
         engine = TouchGuardianService.instance?.profiler ?: TouchProfilerEngine()
-        binding.labTouchCanvasView.profiler = engine
+        engine.impulseSensor = impulseSensor
 
-        setupModeSelectors()
+        // Load calibrated zones
+        val zones = GhostCalibrationEngine.parseZonesFromJson(prefs.savedHotspotsJson)
+        engine.calibratedHotspots = zones
+        engine.calibratedAvgPeriodMs = prefs.calibratedAvgPeriodMs
+        engine.calibratedVariancePercent = prefs.calibratedVariancePercent
+
+        // Load ghost fingerprint from Identify Mode
+        engine.ghostFingerprint = GhostFingerprint.fromJson(prefs.ghostFingerprintJson)
+
+        binding.labTouchCanvasView.profiler = engine
+        binding.labTouchCanvasView.hotspots = zones
+
+        setupModeButtons()
         setupClearButton()
         setupHumanExitSlider()
         setupCallbacks()
+        applyMode(LabMode.DIAGNOSTIC)
         updateStats()
     }
 
@@ -55,60 +94,79 @@ class TestLabActivity : AppCompatActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
-            lockImmersiveMode()
-        }
+        if (hasFocus) lockImmersiveMode()
     }
 
-    private fun setupModeSelectors() {
-        renderModeButtons(engine.isGhostOnlyMode)
+    private fun setupModeButtons() {
+        // MODE 1: Ghost Detect (treat all as ghost — for visual identification)
+        binding.btnModeGhostDetect.setOnClickListener {
+            applyMode(LabMode.GHOST_DETECT)
+        }
 
+        // MODE 2: Diagnostic (show both ghost + human)
         binding.btnModeDiagnostic.setOnClickListener {
-            engine.isGhostOnlyMode = false
-            renderModeButtons(false)
-            binding.labTouchCanvasView.invalidate()
-            Toast.makeText(this, "Diagnostic: All Touches Shown", Toast.LENGTH_SHORT).show()
+            applyMode(LabMode.DIAGNOSTIC)
         }
 
-        binding.btnModeGhostOnly.setOnClickListener {
-            engine.isGhostOnlyMode = true
-            renderModeButtons(true)
-            binding.labTouchCanvasView.invalidate()
-            Toast.makeText(this, "Ghost-Only: Real Fingers Ignored", Toast.LENGTH_SHORT).show()
+        // MODE 3: Ghost Block (actively block ghosts matching fingerprint)
+        binding.btnModeGhostBlock.setOnClickListener {
+            if (!engine.ghostFingerprint.isValid && prefs.savedHotspotsJson.isBlank()) {
+                Toast.makeText(this, "⚠ No ghost fingerprint loaded. Run Ghost Identify first!", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            applyMode(LabMode.GHOST_BLOCK)
         }
     }
 
-    private fun renderModeButtons(isGhostOnly: Boolean) {
-        val activeCyan = ContextCompat.getColor(this, R.color.accent_cyan)
-        val inactiveText = ContextCompat.getColor(this, R.color.text_secondary)
-        val activeGhostRed = ContextCompat.getColor(this, R.color.ghost_red)
-        val borderDark = ContextCompat.getColor(this, R.color.card_border)
+    private fun applyMode(mode: LabMode) {
+        currentMode = mode
+        val cyan = ContextCompat.getColor(this, R.color.accent_cyan)
+        val red = ContextCompat.getColor(this, R.color.ghost_red)
+        val green = ContextCompat.getColor(this, R.color.valid_green)
+        val inactive = ContextCompat.getColor(this, R.color.text_secondary)
+        val border = ContextCompat.getColor(this, R.color.card_border)
 
-        if (isGhostOnly) {
-            // Ghost-only active
-            binding.btnModeGhostOnly.setTextColor(activeGhostRed)
-            binding.btnModeGhostOnly.strokeColor = ColorStateList.valueOf(activeGhostRed)
-            binding.btnModeGhostOnly.strokeWidth = 2
-
-            binding.btnModeDiagnostic.setTextColor(inactiveText)
-            binding.btnModeDiagnostic.strokeColor = ColorStateList.valueOf(borderDark)
-            binding.btnModeDiagnostic.strokeWidth = 1
-
-            binding.tvLabSubheader.text = "GHOST-ONLY FILTER (Fingers Blocked / Ignored)"
-            binding.tvLabSubheader.setTextColor(activeGhostRed)
-        } else {
-            // Diagnostic active
-            binding.btnModeDiagnostic.setTextColor(activeCyan)
-            binding.btnModeDiagnostic.strokeColor = ColorStateList.valueOf(activeCyan)
-            binding.btnModeDiagnostic.strokeWidth = 2
-
-            binding.btnModeGhostOnly.setTextColor(inactiveText)
-            binding.btnModeGhostOnly.strokeColor = ColorStateList.valueOf(borderDark)
-            binding.btnModeGhostOnly.strokeWidth = 1
-
-            binding.tvLabSubheader.text = "DIAGNOSTIC MODE (All Taps Tested)"
-            binding.tvLabSubheader.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
+        // Reset all buttons to inactive
+        listOf(binding.btnModeGhostDetect, binding.btnModeDiagnostic, binding.btnModeGhostBlock).forEach { btn ->
+            btn.setTextColor(inactive)
+            btn.strokeColor = ColorStateList.valueOf(border)
+            btn.strokeWidth = 1
         }
+
+        when (mode) {
+            LabMode.GHOST_DETECT -> {
+                engine.isGhostOnlyMode = true
+                engine.isHandsFreeScanActive = false
+                binding.btnModeGhostDetect.setTextColor(red)
+                binding.btnModeGhostDetect.strokeColor = ColorStateList.valueOf(red)
+                binding.btnModeGhostDetect.strokeWidth = 2
+                binding.tvLabSubheader.text = "GHOST DETECT — All touches shown as ghost (red)"
+                binding.tvLabSubheader.setTextColor(red)
+                Toast.makeText(this, "Mode 1: Ghost Detect — every touch marked red", Toast.LENGTH_SHORT).show()
+            }
+            LabMode.DIAGNOSTIC -> {
+                engine.isGhostOnlyMode = false
+                engine.isHandsFreeScanActive = false
+                binding.btnModeDiagnostic.setTextColor(cyan)
+                binding.btnModeDiagnostic.strokeColor = ColorStateList.valueOf(cyan)
+                binding.btnModeDiagnostic.strokeWidth = 2
+                binding.tvLabSubheader.text = "DIAGNOSTIC — Ghost (red) & Human (green) classified"
+                binding.tvLabSubheader.setTextColor(green)
+                Toast.makeText(this, "Mode 2: Diagnostic — both ghost and finger shown", Toast.LENGTH_SHORT).show()
+            }
+            LabMode.GHOST_BLOCK -> {
+                engine.isGhostOnlyMode = false
+                engine.isHandsFreeScanActive = false
+                binding.btnModeGhostBlock.setTextColor(green)
+                binding.btnModeGhostBlock.strokeColor = ColorStateList.valueOf(green)
+                binding.btnModeGhostBlock.strokeWidth = 2
+                binding.tvLabSubheader.text = "GHOST BLOCK — Ghosts blocked by fingerprint engine"
+                binding.tvLabSubheader.setTextColor(green)
+                Toast.makeText(this, "Mode 3: Ghost Block — using fingerprint to block ghosts", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.labTouchCanvasView.invalidate()
     }
 
     private fun setupClearButton() {
@@ -146,5 +204,10 @@ class TestLabActivity : AppCompatActivity() {
         binding.tvLabGhostCount.text = buffer.totalGhostCount.toString()
         binding.tvLabEchoCount.text = buffer.totalEchoCount.toString()
         binding.tvLabHumanCount.text = buffer.totalHumanCount.toString()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        impulseSensor?.stop()
     }
 }

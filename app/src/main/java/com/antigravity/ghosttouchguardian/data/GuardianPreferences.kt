@@ -36,6 +36,31 @@ class GuardianPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_TESTING_ALERTS_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_TESTING_ALERTS_ENABLED, value).apply()
 
+    var savedHotspotsJson: String
+        get() = prefs.getString(KEY_SAVED_HOTSPOTS, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_SAVED_HOTSPOTS, value).apply()
+
+    var isHotspotShieldEnabled: Boolean
+        get() = prefs.getBoolean(KEY_HOTSPOT_SHIELD_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_HOTSPOT_SHIELD_ENABLED, value).apply()
+
+    var calibratedAvgPeriodMs: Long
+        get() = prefs.getLong(KEY_CALIBRATED_AVG_PERIOD, 0L)
+        set(value) = prefs.edit().putLong(KEY_CALIBRATED_AVG_PERIOD, value).apply()
+
+    var calibratedVariancePercent: Float
+        get() = prefs.getFloat(KEY_CALIBRATED_VARIANCE, 100f)
+        set(value) = prefs.edit().putFloat(KEY_CALIBRATED_VARIANCE, value).apply()
+
+    // Ghost Fingerprint (from Identify Mode)
+    var ghostFingerprintJson: String
+        get() = prefs.getString(KEY_GHOST_FINGERPRINT, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GHOST_FINGERPRINT, value).apply()
+
+    var isGhostFingerprintEnabled: Boolean
+        get() = prefs.getBoolean(KEY_FINGERPRINT_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_FINGERPRINT_ENABLED, value).apply()
+
     companion object {
         private const val PREF_NAME = "ghost_touch_guardian_prefs"
         private const val KEY_PROFILE_ID = "pref_profile_id"
@@ -43,5 +68,11 @@ class GuardianPreferences(context: Context) {
         private const val KEY_BLOCKED_GHOSTS = "pref_blocked_ghosts"
         private const val KEY_BLOCKED_ECHOES = "pref_blocked_echoes"
         private const val KEY_TESTING_ALERTS_ENABLED = "pref_testing_alerts_enabled"
+        private const val KEY_SAVED_HOTSPOTS = "pref_saved_hotspots"
+        private const val KEY_HOTSPOT_SHIELD_ENABLED = "pref_hotspot_shield_enabled"
+        private const val KEY_CALIBRATED_AVG_PERIOD = "pref_calibrated_avg_period"
+        private const val KEY_CALIBRATED_VARIANCE = "pref_calibrated_variance"
+        private const val KEY_GHOST_FINGERPRINT = "pref_ghost_fingerprint"
+        private const val KEY_FINGERPRINT_ENABLED = "pref_fingerprint_enabled"
     }
 }

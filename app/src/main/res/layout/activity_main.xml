@@ -223,6 +223,83 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- AI Ghost Auto-Learning & Shield Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardGhostLearning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="#0E1726"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#00E5FF"
+            app:strokeWidth="1.5dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AI GHOST LEARNING &amp; SHIELD"
+                    android:textColor="#00E5FF"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvGhostLearningDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Identify ghost touch factors, calibrate glitch zones, and activate continuous background shield overlay."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:lineSpacingExtra="2dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnGhostIdentify"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="14dp"
+                    android:text="1. GHOST IDENTIFY (LEARN FINGERPRINT)"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#FF5252"
+                    android:textColor="#FFFFFF"
+                    app:cornerRadius="12dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAutoCalibrateScreen"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="8dp"
+                    android:text="2. AUTO-CALIBRATION (ZONE MAPPER)"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#00E5FF"
+                    android:textColor="#070A11"
+                    app:cornerRadius="12dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnToggleHotspotShield"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Hotspot Shield: OFF"
+                    android:textColor="#FF5252"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="#FF5252" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Live telemetry — read only -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"

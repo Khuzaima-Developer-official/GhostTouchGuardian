@@ -2,7 +2,9 @@ package com.antigravity.ghosttouchguardian.engine
 
 import android.view.MotionEvent
 import com.antigravity.ghosttouchguardian.model.CompactTouchBuffer
+import com.antigravity.ghosttouchguardian.model.GhostFingerprint
 import com.antigravity.ghosttouchguardian.model.GhostTouchProfile
+import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -14,6 +16,15 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     var isGhostOnlyMode: Boolean = false
     var isHandsFreeScanActive: Boolean = false
 
+    // Hardware sensors
+    var impulseSensor: MechanicalImpulseSensor? = null
+    var calibratedHotspots: List<HotspotZone> = emptyList()
+    var calibratedAvgPeriodMs: Long = 0L
+    var calibratedVariancePercent: Float = 100f
+
+    /** Learned ghost fingerprint from Identify Mode (multi-dimensional ghost profile) */
+    var ghostFingerprint: GhostFingerprint = GhostFingerprint.empty()
+
     // Telemetry callbacks
     var onAnomalyDetected: ((type: Byte, x: Float, y: Float, dwell: Int, factorReason: String) -> Unit)? = null
     var onHumanIgnoredInGhostMode: ((x: Float, y: Float, dwell: Int) -> Unit)? = null
@@ -22,6 +33,7 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     private var lastHumanUpTime: Long = 0L
     private var lastHumanUpX: Float = -1f
     private var lastHumanUpY: Float = -1f
+    private var lastAnyUpTime: Long = 0L
 
     // Touch down tracking
     private var lastDownTime: Long = 0L
@@ -71,7 +83,8 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
         pressure: Float = 0f,
         pointerCount: Int = 1,
         p1X: Float = -1f,
-        p1Y: Float = -1f
+        p1Y: Float = -1f,
+        forcedImpulse: Boolean? = null
     ): Byte {
         // Stylus bypass
         if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
@@ -165,6 +178,33 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 val dwell = (eventTime - lastDownTime).toInt()
                 val deltaSinceLastUp = if (lastHumanUpTime > 0L) lastDownTime - lastHumanUpTime else 9999L
 
+                // Check shockwave
+                val hasShockwave = forcedImpulse ?: (impulseSensor?.hasMechanicalImpulse(lastDownTime) ?: false)
+
+                // Check hotspot
+                val inHotspot = calibratedHotspots.any { it.contains(x, y) }
+
+                // Check fingerprint match (multi-dimensional ghost profile from Identify Mode)
+                val accelDelta = impulseSensor?.getLastAccelDelta() ?: 0f
+                val fingerprintScore = if (ghostFingerprint.isValid) {
+                    ghostFingerprint.matchScore(x, y, dwell, size, pressure, accelDelta)
+                } else 0f
+                val matchesFingerprint = fingerprintScore >= 0.60f
+
+                // Check custom block rules
+                val matchesCustomRule = ghostFingerprint.customBlockRules.any { it.matches(x, y, dwell) }
+
+                // Check periodicity (measured up-to-up, lift-to-down, or down-to-down)
+                val intervalUpToUp = if (lastAnyUpTime > 0L) eventTime - lastAnyUpTime else 0L
+                val intervalLiftToDown = if (lastAnyUpTime > 0L) lastDownTime - lastAnyUpTime else 0L
+                val intervalDownToDown = if (lastAnyDownTime > 0L) lastDownTime - lastAnyDownTime else 0L
+                val matchesPeriodicity = if (calibratedAvgPeriodMs in 10L..2500L && calibratedVariancePercent < 15f) {
+                    val tol = (calibratedAvgPeriodMs * 0.15f).coerceAtLeast(12f)
+                    abs(intervalUpToUp - calibratedAvgPeriodMs) <= tol ||
+                    abs(intervalLiftToDown - calibratedAvgPeriodMs) <= tol ||
+                    abs(intervalDownToDown - calibratedAvgPeriodMs) <= tol
+                } else false
+
                 val type: Byte
                 val factorReason: String
 
@@ -180,6 +220,26 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                     isStaticLockDetected -> {
                         type = CompactTouchBuffer.TYPE_STATIC_LOCK
                         factorReason = "Static Droplet ($dwell ms)"
+                    }
+                    inHotspot && !hasShockwave && dwell in 8..110 -> {
+                        // Glitch in hotspot
+                        type = CompactTouchBuffer.TYPE_GHOST_HOTSPOT
+                        factorReason = "Calibrated Ghost ($dwell ms, zero shockwave)"
+                    }
+                    matchesPeriodicity && !hasShockwave && dwell in 8..90 -> {
+                        // Periodic machine glitch
+                        type = CompactTouchBuffer.TYPE_GHOST_IDLE
+                        factorReason = "Periodic Ghost ($dwell ms, ${intervalLiftToDown}ms period)"
+                    }
+                    matchesFingerprint && !hasShockwave -> {
+                        // Fingerprint matched — multi-factor ghost (learned from Identify Mode)
+                        type = CompactTouchBuffer.TYPE_GHOST_HOTSPOT
+                        factorReason = "Fingerprint Ghost (score=${String.format("%.2f", fingerprintScore)}, dwell=${dwell}ms)"
+                    }
+                    matchesCustomRule && !hasShockwave -> {
+                        // User's custom block rule matched
+                        type = CompactTouchBuffer.TYPE_GHOST_IDLE
+                        factorReason = "Custom Rule Block (dwell=${dwell}ms)"
                     }
                     dwell < 75 -> {
                         // Human tap
@@ -199,11 +259,14 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                     }
                 }
 
+                lastAnyUpTime = eventTime
+
                 val isGhost = (type == CompactTouchBuffer.TYPE_GHOST_IDLE ||
                         type == CompactTouchBuffer.TYPE_GHOST_ECHO ||
                         type == CompactTouchBuffer.TYPE_GHOST_TELEPORT ||
                         type == CompactTouchBuffer.TYPE_STATIC_LOCK ||
-                        type == CompactTouchBuffer.TYPE_GRID_COLINEAR)
+                        type == CompactTouchBuffer.TYPE_GRID_COLINEAR ||
+                        type == CompactTouchBuffer.TYPE_GHOST_HOTSPOT)
 
                 // Dispatch event
                 if (isGhostOnlyMode) {
@@ -237,6 +300,7 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
         lastAnyDownTime = 0L
         lastAnyDownX = -1f
         lastAnyDownY = -1f
+        lastAnyUpTime = 0L
         moveSampleCount = 0
         moveVarianceSum = 0f
         isStaticLockDetected = false

@@ -251,4 +251,65 @@ class TouchProfilerEngineTest {
 
         assertTrue("Collinear touches on same grid line must trigger ITO short", itcShortDetected)
     }
+
+    @Test
+    fun testCalibratedHotspotGlitchWithoutShockwaveIsBlocked() {
+        val hotspot = com.antigravity.ghosttouchguardian.engine.HotspotZone(800f, 100f, 1000f, 300f, 5)
+        engine.calibratedHotspots = listOf(hotspot)
+
+        // Ghost fires in hotspot without physical finger shockwave
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 850f, y = 150f, eventTime = 12000L)
+        val result = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            x = 850f, y = 150f,
+            eventTime = 12035L,
+            downTime = 12000L,
+            forcedImpulse = false
+        )
+
+        assertEquals(CompactTouchBuffer.TYPE_GHOST_HOTSPOT, result)
+        assertEquals(1L, engine.buffer.totalGhostCount)
+    }
+
+    @Test
+    fun testRealFingerInHotspotWithShockwavePasses() {
+        val hotspot = com.antigravity.ghosttouchguardian.engine.HotspotZone(800f, 100f, 1000f, 300f, 5)
+        engine.calibratedHotspots = listOf(hotspot)
+
+        // User taps inside the hotspot, but physical shockwave is confirmed
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 850f, y = 150f, eventTime = 13000L)
+        val result = engine.processTouch(
+            action = MotionEvent.ACTION_UP,
+            x = 850f, y = 150f,
+            eventTime = 13035L,
+            downTime = 13000L,
+            forcedImpulse = true
+        )
+
+        assertEquals(CompactTouchBuffer.TYPE_HUMAN_FAST_TAP, result)
+        assertEquals(1L, engine.buffer.totalHumanCount)
+        assertEquals(0L, engine.buffer.totalGhostCount)
+    }
+
+    @Test
+    fun testClockPeriodicGlitchIsBlocked() {
+        engine.calibratedAvgPeriodMs = 100L
+        engine.calibratedVariancePercent = 2.0f
+
+        // First event
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 500f, y = 500f, eventTime = 14000L)
+        engine.processTouch(MotionEvent.ACTION_UP, x = 500f, y = 500f, eventTime = 14030L, downTime = 14000L, forcedImpulse = true)
+
+        // Periodic glitch fires exactly 100ms later without physical shockwave
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 500f, y = 500f, eventTime = 14130L)
+        val result = engine.processTouch(
+            MotionEvent.ACTION_UP,
+            x = 500f, y = 500f,
+            eventTime = 14160L,
+            downTime = 14130L,
+            forcedImpulse = false
+        )
+
+        assertEquals(CompactTouchBuffer.TYPE_GHOST_IDLE, result)
+    }
 }

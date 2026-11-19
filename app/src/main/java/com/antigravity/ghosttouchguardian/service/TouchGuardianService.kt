@@ -27,6 +27,7 @@ class TouchGuardianService : Service() {
     val temporalFilter = TemporalFilter()
     val profiler = TouchProfilerEngine()
     private lateinit var prefs: GuardianPreferences
+    private var impulseSensor: com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor? = null
 
     private var screenReceiver: ScreenStateReceiver? = null
     private var isScreenActive: Boolean = true
@@ -43,6 +44,17 @@ class TouchGuardianService : Service() {
         profiler.profile = profile
         temporalFilter.applyProfile(profile)
         temporalFilter.isEnabled = prefs.isGuardianEnabled
+
+        // Impulse sensor
+        impulseSensor = com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor(this)
+        impulseSensor?.start()
+        profiler.impulseSensor = impulseSensor
+
+        val zones = com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine.parseZonesFromJson(prefs.savedHotspotsJson)
+        profiler.calibratedHotspots = zones
+        profiler.calibratedAvgPeriodMs = prefs.calibratedAvgPeriodMs
+        profiler.calibratedVariancePercent = prefs.calibratedVariancePercent
+        profiler.ghostFingerprint = com.antigravity.ghosttouchguardian.model.GhostFingerprint.fromJson(prefs.ghostFingerprintJson)
 
         // Create channel
         createNotificationChannel()
@@ -64,10 +76,12 @@ class TouchGuardianService : Service() {
             onScreenOn = {
                 isScreenActive = true
                 temporalFilter.isEnabled = prefs.isGuardianEnabled
+                impulseSensor?.start()
             },
             onScreenOff = {
                 isScreenActive = false
                 temporalFilter.isEnabled = false
+                impulseSensor?.stop()
                 profiler.flush()
                 temporalFilter.flush()
             }
@@ -161,6 +175,7 @@ class TouchGuardianService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        impulseSensor?.stop()
         screenReceiver?.let { unregisterReceiver(it) }
         screenReceiver = null
         instance = null
