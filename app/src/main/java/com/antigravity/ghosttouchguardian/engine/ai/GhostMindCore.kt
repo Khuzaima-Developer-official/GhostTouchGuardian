@@ -98,13 +98,13 @@ class GhostMindCore(
         }
 
         // 7. Ghost Glitch Range Spectrum Match
-        // Any touch with zero momentum whose dwell falls in the glitch envelope:
-        if (ghostProfile.isValid && ghostProfile.matchesGlitchType(dwell, accelDelta, intervalFromPrevMs, timeSinceLastHumanUp)) {
+        // Any touch with zero momentum whose dwell falls in the glitch envelope (minimum 4ms required):
+        if (ghostProfile.isValid && dwell >= 4 && ghostProfile.matchesGlitchType(dwell, accelDelta, intervalFromPrevMs, timeSinceLastHumanUp)) {
             return AIClassification.ghostSpectrum(0.89f, "Glitch Spectrum [${ghostProfile.minDwell}..${ghostProfile.maxDwell}ms] ($dwell ms)")
         }
 
-        // 8. General Zero-Momentum Fast Spark (active when ghost profile is calibrated)
-        if (ghostProfile.isValid && accelDelta < 0.015f && dwell <= 45 && size < 0.035f && pressure < 0.10f) {
+        // 8. General Zero-Momentum Fast Spark (active when ghost profile is calibrated, dwell must be completed 4..45ms)
+        if (ghostProfile.isValid && dwell in 4..45 && accelDelta < 0.015f && size < 0.035f && pressure < 0.10f) {
             return AIClassification.ghostSpark(0.87f, "Zero-Momentum Spark ($dwell ms)")
         }
 

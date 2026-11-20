@@ -33,6 +33,9 @@ class MechanicalImpulseSensor(context: Context) : SensorEventListener {
     var isRunning: Boolean = false
         private set
 
+    /** Callback invoked whenever physical human motion or chassis vibration is detected */
+    var onHumanMotionDetected: (() -> Unit)? = null
+
     fun start() {
         // Start sensor
         if (isRunning || sensor == null) return
@@ -79,6 +82,10 @@ class MechanicalImpulseSensor(context: Context) : SensorEventListener {
             timestamps[head] = nowMs
             impulseMagnitudes[head] = deltaMag
             head = (head + 1) % bufferSize
+        }
+
+        if (deltaMag >= 0.020f) {
+            onHumanMotionDetected?.invoke()
         }
     }
 

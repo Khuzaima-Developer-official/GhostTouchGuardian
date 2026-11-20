@@ -192,10 +192,13 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 val dwell = (eventTime - lastDownTime).toInt()
                 val deltaSinceLastUp = if (lastHumanUpTime > 0L) lastDownTime - lastHumanUpTime else 9999L
 
-                // Check shockwave & physical contact markers
-                val hasImpulse = forcedImpulse ?: (impulseSensor?.hasMechanicalImpulse(lastDownTime, windowMs = 80L) ?: false)
-                val isFleshyHuman = (size >= 0.04f && pressure >= 0.12f) || pointerCount > 1
-                val isHumanConfirmed = if (forcedImpulse == false) false else (hasImpulse || isFleshyHuman)
+                val accelDelta = impulseSensor?.getLastAccelDelta() ?: 0f
+
+                // Check shockwave & physical contact markers (including learned finger profile)
+                val hasImpulse = forcedImpulse ?: (impulseSensor?.hasMechanicalImpulse(lastDownTime, windowMs = 120L) ?: false)
+                val matchesLearnedHuman = ghostMindCore.humanProfile.isValid && ghostMindCore.humanProfile.matchesHuman(dwell, size, pressure, accelDelta)
+                val isFleshyHuman = (size >= 0.032f && pressure >= 0.08f) || pointerCount > 1
+                val isHumanConfirmed = if (forcedImpulse == false) false else (hasImpulse || isFleshyHuman || matchesLearnedHuman)
 
                 // Check post-stylus electrostatic discharge echo
                 val timeSinceStylusMs = if (lastStylusUpTime > 0L) lastDownTime - lastStylusUpTime else -1L
@@ -205,7 +208,6 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                 val inHotspot = calibratedHotspots.any { it.contains(x, y) }
 
                 // Check fingerprint match (multi-dimensional ghost profile from Identify Mode)
-                val accelDelta = impulseSensor?.getLastAccelDelta() ?: 0f
                 val fingerprintScore = if (ghostFingerprint.isValid) {
                     ghostFingerprint.matchScore(x, y, dwell, size, pressure, accelDelta)
                 } else 0f

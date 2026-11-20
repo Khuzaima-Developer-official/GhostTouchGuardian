@@ -81,8 +81,14 @@ class HotspotShieldService : Service() {
         super.onCreate()
         prefs = GuardianPreferences(this)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        impulseSensor = MechanicalImpulseSensor(this)
-        impulseSensor.start()
+        impulseSensor = MechanicalImpulseSensor(this).apply {
+            onHumanMotionDetected = {
+                if (!isTouchThrough) {
+                    passThroughTemporarily()
+                }
+            }
+            start()
+        }
 
         reloadProfiles()
         if (checkOverlayPermission()) {
@@ -194,6 +200,8 @@ class HotspotShieldService : Service() {
             windowManager.addView(view, params)
             overlayView = view
             overlayParams = params
+            // Start in pass-through so real finger touches are NEVER restricted during initial use
+            passThroughTemporarily()
         } catch (_: Exception) {}
     }
 
@@ -332,27 +340,17 @@ class HotspotShieldService : Service() {
                     // Check if inside any calibrated Green Safe Zone (interactive stimulus)
                     val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
 
-                    // Classify at ACTION_DOWN with AI Mind
-                    val classification = aiCore.classify(
-                        toolType = toolType,
-                        dwell = 0, // at DOWN, dwell is 0
-                        size = event.size,
-                        pressure = event.pressure,
-                        accelDelta = effectiveAccel,
-                        intervalFromPrevMs = interval,
-                        timeSinceLastHumanUp = timeSinceHuman,
-                        timeSinceLastStylusUp = timeSinceStylus,
-                        inGreenZone = inGreenZone
-                    )
+                    // If physical shockwave, flesh deformation, green zone, or learned human profile matches:
+                    val isHumanTap = hasImpulse || event.size >= 0.035f || event.pressure >= 0.10f || inGreenZone ||
+                            (aiCore.humanProfile.isValid && aiCore.humanProfile.matchesHuman(0, event.size, event.pressure, effectiveAccel))
 
-                    if (!classification.isGhost) {
-                        // Real human finger touch confirmed!
+                    if (isHumanTap) {
                         lastHumanUpTime = now
                         passThroughTemporarily()
                         return false // Allow DOWN to pass to underlying app cleanly
                     }
 
-                    // Ghost touch detected at ACTION_DOWN -> Swallow it!
+                    // Ghost candidate: Wait and evaluate at ACTION_UP where dwell is known
                     return true
                 }
 
@@ -400,8 +398,8 @@ class HotspotShieldService : Service() {
                         inGreenZone = inGreenZone
                     )
 
-                    // Human Invariant: If classified as human or held > 110ms
-                    if (!classification.isGhost || dwell > 110) {
+                    // Human Invariant: If classified as human, dwell > 65ms, physical impulse, or fleshy contact
+                    if (!classification.isGhost || dwell > 65 || hasImpulse || event.size >= 0.035f || inGreenZone) {
                         lastHumanUpTime = now
                         if (!isTouchThrough) passThroughTemporarily()
                         return false
