@@ -190,7 +190,8 @@ class TouchCanvasView @JvmOverloads constructor(
                 }
                 CompactTouchBuffer.TYPE_GHOST_HOTSPOT -> {
                     canvas.drawCircle(x, y, radius * 1.4f, ghostIdlePaint)
-                    drawPillLabel(canvas, "CALIBRATED GHOST ($dwell ms)", x, y, 0xFFFF1744.toInt())
+                    val label = if (engine.ghostMindCore.ghostProfile.isValid) "AI SPECTRUM GHOST ($dwell ms)" else "CALIBRATED GHOST ($dwell ms)"
+                    drawPillLabel(canvas, label, x, y, 0xFFFF1744.toInt())
                 }
                 CompactTouchBuffer.TYPE_SPEN -> {
                     canvas.drawCircle(x, y, 26f, spenPaint)

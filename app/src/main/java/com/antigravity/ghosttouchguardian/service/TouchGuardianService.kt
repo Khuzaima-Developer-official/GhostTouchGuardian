@@ -90,6 +90,10 @@ class TouchGuardianService : Service() {
                 impulseSensor?.stop()
                 profiler.flush()
                 temporalFilter.flush()
+                val screenOffIntent = Intent(this@TouchGuardianService, HotspotShieldService::class.java).apply {
+                    action = HotspotShieldService.ACTION_SCREEN_OFF
+                }
+                try { startService(screenOffIntent) } catch (_: Exception) {}
             }
         )
 

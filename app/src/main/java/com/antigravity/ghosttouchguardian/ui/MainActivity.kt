@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         setupActions()
         setupCalibrationCard()
         setupHardwareCard()
+        updateAiStatusBadges()
         renderActiveProfile(prefs.currentProfile)
     }
 
@@ -64,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         updateDashboard()
         updateShieldButton()
         updateSPenButton()
+        updateAiStatusBadges()
         renderActiveProfile(prefs.currentProfile)
     }
 
@@ -253,7 +255,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleHotspotShield.setOnClickListener {
             val hasZones = prefs.savedHotspotsJson.isNotBlank()
             val hasFp = prefs.ghostFingerprintJson.isNotBlank()
-            if (!hasZones && !hasFp) {
+            val hasAiProfile = prefs.ghostGlitchProfileJson.isNotBlank()
+            if (!hasZones && !hasFp && !hasAiProfile) {
                 Toast.makeText(this, "Run Ghost Identify or Calibration first to learn ghost patterns!", Toast.LENGTH_SHORT).show()
                 startActivity(Intent(this, GhostIdentifyActivity::class.java))
                 return@setOnClickListener
@@ -314,18 +317,61 @@ class MainActivity : AppCompatActivity() {
         // Update shield
         val hasZones = prefs.savedHotspotsJson.isNotBlank()
         val hasFp = prefs.ghostFingerprintJson.isNotBlank()
+        val hasAiProfile = prefs.ghostGlitchProfileJson.isNotBlank()
+        val isCalibrated = hasZones || hasFp || hasAiProfile
         val zones = com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine.parseZonesFromJson(prefs.savedHotspotsJson)
 
-        if (prefs.isHotspotShieldEnabled && (hasZones || hasFp)) {
-            val guardDetails = if (hasFp) "Fingerprint & ${zones.size} Zones" else "${zones.size} Zones"
+        if (prefs.isHotspotShieldEnabled && isCalibrated) {
+            val guardDetails = when {
+                hasAiProfile -> "GhostMind AI Profile"
+                hasFp -> "Fingerprint & ${zones.size} Zones"
+                else -> "${zones.size} Zones"
+            }
             binding.btnToggleHotspotShield.text = "Hotspot Shield: ACTIVE ($guardDetails Guarded)"
             binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
             binding.btnToggleHotspotShield.strokeColor = ContextCompat.getColorStateList(this, R.color.valid_green)
         } else {
-            val status = if (hasZones || hasFp) "Hotspot Shield: OFF (Ready to Activate)" else "Hotspot Shield: OFF (Not Calibrated)"
+            val status = if (isCalibrated) "Hotspot Shield: OFF (Ready to Activate)" else "Hotspot Shield: OFF (Not Calibrated)"
             binding.btnToggleHotspotShield.text = status
             binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, R.color.ghost_red))
             binding.btnToggleHotspotShield.strokeColor = ContextCompat.getColorStateList(this, R.color.ghost_red)
+        }
+    }
+
+    private fun updateAiStatusBadges() {
+        // 1. Finger Profile
+        val humanProfile = com.antigravity.ghosttouchguardian.model.HumanFingerProfile.fromJson(prefs.humanFingerProfileJson)
+        if (humanProfile.isValid) {
+            binding.tvAiFingerStatus.text = "🟢 Real Finger Profile: LOCKED (100% Native Pass-Through)"
+            binding.tvAiFingerStatus.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
+        } else {
+            binding.tvAiFingerStatus.text = "🟢 Real Finger Profile: Not Calibrated (Tap Step 1 to Lock)"
+            binding.tvAiFingerStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        }
+
+        // 2. Ghost Glitch Spectrum
+        val ghostProfile = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile.fromJson(prefs.ghostGlitchProfileJson)
+        if (ghostProfile.isValid) {
+            binding.tvAiGhostStatus.text = "🔴 Ghost Spectrum: [${ghostProfile.minDwell}..${ghostProfile.maxDwell}ms], Band [${ghostProfile.minIntervalMs}..${ghostProfile.maxIntervalMs}ms]"
+            binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+        } else {
+            val hasZones = prefs.savedHotspotsJson.isNotBlank()
+            if (hasZones) {
+                binding.tvAiGhostStatus.text = "🔴 Glitch Map: Calibrated Zone Hotspots"
+                binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
+            } else {
+                binding.tvAiGhostStatus.text = "🔴 Ghost Spectrum: Not Calibrated (Tap Step 1 to Scan)"
+                binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            }
+        }
+
+        // 3. Dedicated S Pen Status
+        if (prefs.isSPenModeActive) {
+            binding.tvAiSPenStatus.text = "🖊️ Dedicated S Pen: FULL-TIME ACTIVE (EMR Priority)"
+            binding.tvAiSPenStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+        } else {
+            binding.tvAiSPenStatus.text = "🖊️ Dedicated S Pen: OFF (Tap toggle below)"
+            binding.tvAiSPenStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
         }
     }
 

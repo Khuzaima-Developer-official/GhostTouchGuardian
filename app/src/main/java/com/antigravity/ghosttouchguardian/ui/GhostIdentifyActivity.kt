@@ -126,6 +126,11 @@ class GhostIdentifyActivity : AppCompatActivity() {
         val accel = impulseSensor?.getLastAccelDelta() ?: 0.02f
         binding.tvFingerBioFeedback.text = "Tap #$count Registered: Mass=${String.format("%.3f", accel)} m/s², Flesh=${String.format("%.3f", size)}"
 
+        // Visual tap feedback animation
+        binding.cardFingerTapTarget.animate().scaleX(0.96f).scaleY(0.96f).setDuration(60).withEndAction {
+            binding.cardFingerTapTarget.animate().scaleX(1.0f).scaleY(1.0f).setDuration(60).start()
+        }.start()
+
         if (count >= 5) {
             humanProfile = HumanFingerProfile.fromSamples(fingerSamples)
             binding.tvFingerTapHint.text = "✅ FINGER PROFILE LOCKED!"
@@ -355,7 +360,25 @@ class GhostIdentifyActivity : AppCompatActivity() {
             prefs.isFingerShieldModeActive = true
             prefs.isHotspotShieldEnabled = true
 
-            // Start HotspotShieldService with AI Core
+            // Cluster recorded ghost entries into hotspots if localized
+            if (recordedGhostEntries.isNotEmpty()) {
+                val calibEngine = com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine()
+                calibEngine.startCalibration()
+                for (entry in recordedGhostEntries) {
+                    calibEngine.recordTouch(entry.x, entry.y, entry.timestamp)
+                }
+                val calibResult = calibEngine.finishCalibration()
+                if (calibResult.zones.isNotEmpty()) {
+                    prefs.savedHotspotsJson = com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine.serializeZonesToJson(calibResult.zones)
+                    prefs.calibratedAvgPeriodMs = calibResult.avgPeriodMs
+                    prefs.calibratedVariancePercent = calibResult.periodVariancePercent
+                }
+            }
+
+            // Start HotspotShieldService with AI Core and refreshed zones
+            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_REFRESH_ZONES
+            })
             startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                 action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
             })

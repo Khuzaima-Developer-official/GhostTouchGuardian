@@ -55,18 +55,23 @@ class HotspotShieldService : Service() {
     @Volatile private var isScreenWakeGuardActive = false
     private val screenWakeGuardOff = Runnable { isScreenWakeGuardActive = false }
 
-    // Human micro-motion aware re-arm
+    // Human interaction tracking to avoid mid-gesture or active-use interruptions
+    @Volatile private var lastHumanInteractionTime: Long = 0L
+    @Volatile private var isPointerDownOnScreen: Boolean = false
+
+    // Human micro-motion & interaction-aware re-arm
     private val reArmRunnable: Runnable = object : Runnable {
         override fun run() {
             val now = android.os.SystemClock.uptimeMillis()
-            val hasRecentMotion = impulseSensor.hasMechanicalImpulse(now, windowMs = 1500L)
+            val timeSinceHuman = now - lastHumanInteractionTime
+            val hasRecentMotion = impulseSensor.hasMechanicalImpulse(now, windowMs = 2500L)
             val accelDelta = impulseSensor.getLastAccelDelta()
 
-            if (hasRecentMotion || accelDelta >= 0.009f) {
-                // User is still holding or interacting with the phone — postpone re-arm!
-                handler.postDelayed(this, 2000L)
+            // NEVER re-arm if pointer is held down, user interacted within last 15s, or phone is moving
+            if (isPointerDownOnScreen || timeSinceHuman < 15_000L || hasRecentMotion || accelDelta >= 0.009f) {
+                handler.postDelayed(this, 5000L)
             } else {
-                // Phone is undisturbed and quiet — safe to engage shield
+                // Phone is genuinely undisturbed, on desk/idle — safe to re-arm shield
                 reArmShield()
             }
         }
@@ -110,7 +115,11 @@ class HotspotShieldService : Service() {
             ACTION_SCREEN_WAKE_GUARD -> {
                 isScreenWakeGuardActive = true
                 handler.removeCallbacks(screenWakeGuardOff)
-                handler.postDelayed(screenWakeGuardOff, 1500L)
+                handler.postDelayed(screenWakeGuardOff, 2000L)
+                reArmShield()
+            }
+            ACTION_SCREEN_OFF -> {
+                reArmShield()
             }
             ACTION_ENABLE_SPEN_MODE -> {
                 prefs.isSPenModeActive = true
@@ -189,24 +198,35 @@ class HotspotShieldService : Service() {
     }
 
     private fun passThroughTemporarily() {
-        isTouchThrough = true
-        overlayParams?.let { p ->
-            p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-            try {
-                overlayView?.let { windowManager.updateViewLayout(it, p) }
-            } catch (_: Exception) {}
+        lastHumanInteractionTime = android.os.SystemClock.uptimeMillis()
+        if (!isTouchThrough) {
+            isTouchThrough = true
+            overlayParams?.let { p ->
+                p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                try {
+                    overlayView?.let { windowManager.updateViewLayout(it, p) }
+                } catch (_: Exception) {}
+            }
         }
         handler.removeCallbacks(reArmRunnable)
-        handler.postDelayed(reArmRunnable, 4000L)
+        handler.postDelayed(reArmRunnable, 15_000L) // 15s grace period during active use
     }
 
     private fun reArmShield() {
-        isTouchThrough = false
-        overlayParams?.let { p ->
-            p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-            try {
-                overlayView?.let { windowManager.updateViewLayout(it, p) }
-            } catch (_: Exception) {}
+        // NEVER re-arm if user currently has a finger held on the screen!
+        if (isPointerDownOnScreen) {
+            handler.removeCallbacks(reArmRunnable)
+            handler.postDelayed(reArmRunnable, 3000L)
+            return
+        }
+        if (isTouchThrough) {
+            isTouchThrough = false
+            overlayParams?.let { p ->
+                p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                try {
+                    overlayView?.let { windowManager.updateViewLayout(it, p) }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -250,7 +270,21 @@ class HotspotShieldService : Service() {
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (isTouchThrough) return false
+            if (isTouchThrough) {
+                // If a pointer is down, keep resetting re-arm timer so it stays in pass-through
+                if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_MOVE) {
+                    isPointerDownOnScreen = true
+                    lastHumanInteractionTime = event.eventTime
+                    handler.removeCallbacks(reArmRunnable)
+                    handler.postDelayed(reArmRunnable, 15_000L)
+                } else if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    isPointerDownOnScreen = false
+                    lastHumanInteractionTime = event.eventTime
+                    handler.removeCallbacks(reArmRunnable)
+                    handler.postDelayed(reArmRunnable, 15_000L)
+                }
+                return false
+            }
 
             val toolType = event.getToolType(0)
 
@@ -263,8 +297,26 @@ class HotspotShieldService : Service() {
                 return false
             }
 
+            // Screen Wake Guard: When phone wakes from screen off, digitizer produces wake bursts
+            if (isScreenWakeGuardActive) {
+                val hasImpulse = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 120L)
+                val isFleshy = event.size >= 0.04f || event.pressure >= 0.12f
+                if (!hasImpulse && !isFleshy) {
+                    if (event.actionMasked == MotionEvent.ACTION_UP) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                    }
+                    return true // Swallow wake burst
+                } else {
+                    isScreenWakeGuardActive = false
+                    passThroughTemporarily()
+                    return false
+                }
+            }
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    isPointerDownOnScreen = true
+                    lastHumanInteractionTime = event.eventTime
                     pendingDownTime = event.eventTime
                     val now = event.eventTime
                     val interval = if (lastTouchTime > 0L) now - lastTouchTime else -1L
@@ -305,9 +357,11 @@ class HotspotShieldService : Service() {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
+                    isPointerDownOnScreen = true
+                    lastHumanInteractionTime = event.eventTime
                     if (isTouchThrough) {
                         handler.removeCallbacks(reArmRunnable)
-                        handler.postDelayed(reArmRunnable, 4000L)
+                        handler.postDelayed(reArmRunnable, 15_000L)
                         return false
                     }
                     // Late shockwave arrival check
@@ -321,6 +375,8 @@ class HotspotShieldService : Service() {
                 }
 
                 MotionEvent.ACTION_UP -> {
+                    isPointerDownOnScreen = false
+                    lastHumanInteractionTime = event.eventTime
                     val dwell = (event.eventTime - pendingDownTime).toInt()
                     val now = event.eventTime
                     val timeSinceHuman = if (lastHumanUpTime > 0L) pendingDownTime - lastHumanUpTime else -1L
@@ -364,6 +420,8 @@ class HotspotShieldService : Service() {
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
+                    isPointerDownOnScreen = false
+                    lastHumanInteractionTime = event.eventTime
                     return false
                 }
             }
@@ -379,6 +437,7 @@ class HotspotShieldService : Service() {
         const val ACTION_PAUSE = "com.antigravity.guardian.SHIELD_PAUSE"
         const val ACTION_RESUME = "com.antigravity.guardian.SHIELD_RESUME"
         const val ACTION_SCREEN_WAKE_GUARD = "com.antigravity.guardian.SHIELD_WAKE_GUARD"
+        const val ACTION_SCREEN_OFF = "com.antigravity.guardian.SHIELD_SCREEN_OFF"
         const val ACTION_ENABLE_SPEN_MODE = "com.antigravity.guardian.ENABLE_SPEN_MODE"
         const val ACTION_DISABLE_SPEN_MODE = "com.antigravity.guardian.DISABLE_SPEN_MODE"
     }
