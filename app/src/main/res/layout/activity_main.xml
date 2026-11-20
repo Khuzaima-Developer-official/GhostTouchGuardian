@@ -297,6 +297,20 @@
                     android:textStyle="bold"
                     app:cornerRadius="12dp"
                     app:strokeColor="#FF5252" />
+
+                <!-- Dedicated S Pen Mode Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnToggleSPenMode"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Dedicated S Pen Mode: OFF"
+                    android:textColor="#B388FF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="#B388FF" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

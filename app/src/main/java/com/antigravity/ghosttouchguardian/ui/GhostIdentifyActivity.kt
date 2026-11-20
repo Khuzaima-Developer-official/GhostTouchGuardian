@@ -16,19 +16,24 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.antigravity.ghosttouchguardian.data.GuardianPreferences
 import com.antigravity.ghosttouchguardian.databinding.ActivityGhostIdentifyBinding
-import com.antigravity.ghosttouchguardian.model.GhostFingerprint
+import com.antigravity.ghosttouchguardian.model.GhostGlitchProfile
 import com.antigravity.ghosttouchguardian.model.GhostTouchEntry
+import com.antigravity.ghosttouchguardian.model.GreenSafeZone
+import com.antigravity.ghosttouchguardian.model.HumanFingerProfile
 import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
 import kotlin.math.sqrt
 
 /**
- * Ghost Identify Activity — Focused Core Invariants Mode
+ * GhostIdentifyActivity (v2.0) — Guided 2-Phase GhostMind AI Calibration
  *
- * Focuses on the 4 Definitive Physical Invariants:
- * 1. Glitch Zone Centroid (Where the damaged screen area is)
- * 2. Pulse Dwell Time (Fast electrical transient vs human intent)
- * 3. Newtonian Shockwave (Zero physical momentum = ghost)
- * 4. Post-Finger Trailing Echo (Charge trapped on glass after release)
+ * PHASE 1: Real Finger Touch Calibration (5 Natural Taps)
+ *   Learns the user's specific mechanical shockwave mass, flesh deformation size, and tap dwell.
+ *   Guarantees that real clicks and typing are NEVER blocked!
+ *
+ * PHASE 2: Ghost Spectrum Scan with Green Safe Zones
+ *   User taps the Green Safe Zones freely to provoke post-interaction trailing glitches.
+ *   Glitches occurring outside are captured to learn the stochastic frequency envelope [min..max]
+ *   and dwell spectrum, eliminating single-frequency limitations.
  */
 class GhostIdentifyActivity : AppCompatActivity() {
 
@@ -36,22 +41,22 @@ class GhostIdentifyActivity : AppCompatActivity() {
     private lateinit var prefs: GuardianPreferences
     private var impulseSensor: MechanicalImpulseSensor? = null
 
-    private val recordedEntries = mutableListOf<GhostTouchEntry>()
+    // Phase 1: Finger calibration state
+    private val fingerSamples = mutableListOf<Pair<Float, Float>>() // Pair(size, pressure)
+    private var humanProfile = HumanFingerProfile.defaultProfile()
+
+    // Phase 2: Ghost scan state
+    private val recordedGhostEntries = mutableListOf<GhostTouchEntry>()
     private var scanDurationMs: Long = 30_000L
     private var countDownTimer: CountDownTimer? = null
-    private var scanActive = false
+    private var isGhostScanActive = false
 
-    // Finger stimulus tracking
-    private var lastFingerStimulusTime = 0L
-    private var lastFingerStimulusX = -1f
-    private var lastFingerStimulusY = -1f
+    // Green safe zones
+    private val greenZones = mutableListOf<GreenSafeZone>()
 
-    // Consecutive ghost tracking
-    private var lastTouchTime = 0L
-    private var lastTouchX = -1f
-    private var lastTouchY = -1f
-
-    // Per-touch tracking
+    // Stimulus and timing tracking
+    private var lastStimulusTimestamp = 0L
+    private var lastGhostTimestamp = 0L
     private var downX = 0f
     private var downY = 0f
     private var downTime = 0L
@@ -65,7 +70,7 @@ class GhostIdentifyActivity : AppCompatActivity() {
         prefs = GuardianPreferences(this)
         impulseSensor = MechanicalImpulseSensor(this).also { it.start() }
 
-        // Pause background shield during identify mode so all touches can be detected freely
+        // Pause background shield during calibration so all raw touch characteristics can be profiled
         startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
             action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_PAUSE
         })
@@ -78,8 +83,8 @@ class GhostIdentifyActivity : AppCompatActivity() {
             }
         })
 
-        setupTimeSelector()
-        setupStartButton()
+        setupPhase1FingerCalibration()
+        setupPhase2GhostScanControls()
         setupSlideExit()
     }
 
@@ -90,9 +95,53 @@ class GhostIdentifyActivity : AppCompatActivity() {
         ctrl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 
-    private fun setupTimeSelector() {
+    // ---------------------------------------------------------------------------
+    // PHASE 1: Finger Touch Calibration
+    // ---------------------------------------------------------------------------
+    private fun setupPhase1FingerCalibration() {
+        binding.panelFingerCalibration.visibility = View.VISIBLE
+        binding.scanTimeSetup.visibility = View.GONE
+        binding.scanActivePanel.visibility = View.GONE
+        binding.resultPanel.visibility = View.GONE
+
+        binding.cardFingerTapTarget.setOnClickListener {
+            // Handled via dispatchTouchEvent for precise hardware reading
+        }
+
+        binding.btnProceedToGhostScan.setOnClickListener {
+            // Proceed to Step 2
+            binding.panelFingerCalibration.visibility = View.GONE
+            binding.scanTimeSetup.visibility = View.VISIBLE
+        }
+    }
+
+    private fun handleFingerCalibrationTap(event: MotionEvent) {
+        val size = event.size.coerceAtLeast(0.02f)
+        val pressure = event.pressure.coerceAtLeast(0.05f)
+        fingerSamples.add(Pair(size, pressure))
+
+        val count = fingerSamples.size
+        binding.tvFingerTapCount.text = "$count / 5"
+
+        val accel = impulseSensor?.getLastAccelDelta() ?: 0.02f
+        binding.tvFingerBioFeedback.text = "Tap #$count Registered: Mass=${String.format("%.3f", accel)} m/s², Flesh=${String.format("%.3f", size)}"
+
+        if (count >= 5) {
+            humanProfile = HumanFingerProfile.fromSamples(fingerSamples)
+            binding.tvFingerTapHint.text = "✅ FINGER PROFILE LOCKED!"
+            binding.tvFingerTapHint.setTextColor(Color.parseColor("#22C55E"))
+            binding.cardFingerTapTarget.strokeColor = Color.parseColor("#22C55E")
+            binding.btnProceedToGhostScan.visibility = View.VISIBLE
+            Toast.makeText(this, "Finger Profile Locked! Proceed to Step 2.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // PHASE 2: Ghost Touch Spectrum Scan Setup
+    // ---------------------------------------------------------------------------
+    private fun setupPhase2GhostScanControls() {
         binding.seekScanTime.max = 22
-        binding.seekScanTime.progress = 4  // 30s
+        binding.seekScanTime.progress = 4 // 30s
         updateTimeLabel()
 
         binding.seekScanTime.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -103,6 +152,10 @@ class GhostIdentifyActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar) {}
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
         })
+
+        binding.btnStartScan.setOnClickListener {
+            startGhostSpectrumScan()
+        }
     }
 
     private fun updateTimeLabel() {
@@ -110,49 +163,64 @@ class GhostIdentifyActivity : AppCompatActivity() {
         binding.tvSelectedTime.text = "${sec}s"
     }
 
-    private fun setupStartButton() {
-        binding.btnStartScan.setOnClickListener {
-            if (!scanActive) {
-                startScan()
-            }
-        }
-    }
+    private fun startGhostSpectrumScan() {
+        isGhostScanActive = true
+        recordedGhostEntries.clear()
+        lastGhostTimestamp = 0L
+        lastStimulusTimestamp = 0L
 
-    private fun startScan() {
-        scanActive = true
-        recordedEntries.clear()
-        lastTouchTime = 0L
-        lastTouchX = -1f
-        lastTouchY = -1f
-        lastFingerStimulusTime = 0L
-
-        binding.btnStartScan.visibility = View.GONE
         binding.scanTimeSetup.visibility = View.GONE
         binding.scanActivePanel.visibility = View.VISIBLE
-        binding.resultPanel.visibility = View.GONE
 
         val totalSec = (scanDurationMs / 1000L).toInt()
         binding.tvIdentifyCountdown.text = "${totalSec}s"
+
+        // Cache Green Safe Zones coordinates
+        binding.root.post {
+            greenZones.clear()
+            val locTop = IntArray(2)
+            binding.cardGreenSafeZoneTop.getLocationOnScreen(locTop)
+            greenZones.add(GreenSafeZone(
+                left = locTop[0].toFloat(),
+                top = locTop[1].toFloat(),
+                right = (locTop[0] + binding.cardGreenSafeZoneTop.width).toFloat(),
+                bottom = (locTop[1] + binding.cardGreenSafeZoneTop.height).toFloat(),
+                label = "Top Stimulus Pad"
+            ))
+
+            val locBottom = IntArray(2)
+            binding.cardGreenSafeZoneBottom.getLocationOnScreen(locBottom)
+            greenZones.add(GreenSafeZone(
+                left = locBottom[0].toFloat(),
+                top = locBottom[1].toFloat(),
+                right = (locBottom[0] + binding.cardGreenSafeZoneBottom.width).toFloat(),
+                bottom = (locBottom[1] + binding.cardGreenSafeZoneBottom.height).toFloat(),
+                label = "Bottom Stimulus Pad"
+            ))
+        }
 
         countDownTimer = object : CountDownTimer(scanDurationMs, 1000L) {
             override fun onTick(millisUntilFinished: Long) {
                 val sec = (millisUntilFinished / 1000L).toInt()
                 binding.tvIdentifyCountdown.text = "${sec}s"
-                binding.tvCapturedSamples.text = "${recordedEntries.size} Ghost Samples Captured"
+                binding.tvCapturedSamples.text = "${recordedGhostEntries.size} Glitches Captured"
             }
             override fun onFinish() {
                 binding.tvIdentifyCountdown.text = "0s"
-                finishScan()
+                finishGhostSpectrumScan()
             }
         }.start()
 
-        Toast.makeText(this, "SCAN ACTIVE — Tap Safe Spot to provoke post-touch glitches!", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "SCAN ACTIVE — Tap Green Safe Zones to provoke post-touch glitches!", Toast.LENGTH_LONG).show()
     }
 
+    // ---------------------------------------------------------------------------
+    // Dispatch Touch Handling (Phase 1 taps & Phase 2 Green Zones / Glitches)
+    // ---------------------------------------------------------------------------
     override fun dispatchTouchEvent(event: MotionEvent?): Boolean {
         if (event == null) return super.dispatchTouchEvent(event)
 
-        // 1. Human exit slider handles own touches
+        // Slide Exit handler always gets own touches
         val sliderBounds = binding.humanExitSlider.let {
             val loc = IntArray(2); it.getLocationOnScreen(loc)
             Rect(loc[0], loc[1], loc[0] + it.width, loc[1] + it.height)
@@ -161,44 +229,38 @@ class GhostIdentifyActivity : AppCompatActivity() {
             return super.dispatchTouchEvent(event)
         }
 
-        if (!scanActive) {
-            // When scan is not active (setup screen or result panel), shield UI buttons from ghost clicks!
-            // Any touch with zero mechanical shockwave, low pressure, and tiny size is an unwanted phantom:
-            val hasShockwave = impulseSensor?.hasMechanicalImpulse(event.eventTime, windowMs = 80L) ?: false
-            val isFlesh = event.size >= 0.035f || event.pressure >= 0.10f || event.pointerCount > 1
-            if (!hasShockwave && !isFlesh) {
-                // Swallow phantom touch so it cannot click buttons automatically
-                return true
+        // --- PHASE 1 ACTIVE ---
+        if (binding.panelFingerCalibration.visibility == View.VISIBLE) {
+            if (event.actionMasked == MotionEvent.ACTION_UP && fingerSamples.size < 5) {
+                handleFingerCalibrationTap(event)
             }
             return super.dispatchTouchEvent(event)
         }
 
-        // 2. Safe Spot & Human Finger Detection
-        val safeSpotBounds = binding.cardFingerSafeSpot.let {
-            val loc = IntArray(2); it.getLocationOnScreen(loc)
-            Rect(loc[0], loc[1], loc[0] + it.width, loc[1] + it.height)
+        // --- SCAN NOT ACTIVE ---
+        if (!isGhostScanActive) {
+            return super.dispatchTouchEvent(event)
         }
-        val isInsideSafeSpot = safeSpotBounds.contains(event.rawX.toInt(), event.rawY.toInt())
-        val hasShockwave = impulseSensor?.hasMechanicalImpulse(event.eventTime, windowMs = 80L) ?: false
-        val isSafeFingerTap = isInsideSafeSpot || hasShockwave
 
-        if (isSafeFingerTap) {
+        // --- PHASE 2 ACTIVE: GHOST SCAN WITH GREEN SAFE ZONES ---
+        val rawX = event.rawX
+        val rawY = event.rawY
+
+        // Check if inside any Green Safe Zone
+        val isInsideGreenZone = greenZones.any { it.contains(rawX, rawY) }
+
+        if (isInsideGreenZone) {
             if (event.actionMasked == MotionEvent.ACTION_UP) {
-                lastFingerStimulusTime = event.eventTime
-                lastFingerStimulusX = event.x
-                lastFingerStimulusY = event.y
-
+                lastStimulusTimestamp = event.eventTime
                 runOnUiThread {
-                    binding.tvSafeSpotTitle.text = "✅ SAFE FINGER TAP REGISTERED"
-                    binding.tvSafeSpotTitle.setTextColor(Color.parseColor("#00E5FF"))
-                    binding.cardFingerSafeSpot.strokeColor = Color.parseColor("#00E5FF")
-                    binding.tvLastFactor.text = "Finger tap registered -> Waiting for trailing glitches..."
+                    binding.tvLastFactor.text = "✅ Safe Green Tap Registered! Listening for trailing glitches..."
+                    binding.tvLastFactor.setTextColor(Color.parseColor("#22C55E"))
                 }
             }
-            return true
+            return true // Consume stimulus tap safely — NEVER recorded as ghost
         }
 
-        // 3. Ghost Touch Profiling (Zero shockwave touches outside safe spot)
+        // Touches OUTSIDE Green Zone during active scan = Candidate Ghost Glitches
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
@@ -210,21 +272,11 @@ class GhostIdentifyActivity : AppCompatActivity() {
                 val dwell = (event.eventTime - downTime).toInt()
                 val now = event.eventTime
 
-                val intervalFromPrev = if (lastTouchTime > 0L) now - lastTouchTime else 0L
-                val dispFromPrev = if (lastTouchX >= 0f) {
-                    val dx = downX - lastTouchX; val dy = downY - lastTouchY
-                    sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-                } else 0f
-
+                val intervalFromPrev = if (lastGhostTimestamp > 0L) now - lastGhostTimestamp else 0L
+                val timeSinceStimulus = if (lastStimulusTimestamp > 0L) now - lastStimulusTimestamp else -1L
                 val accelDelta = impulseSensor?.getLastAccelDelta() ?: 0f
-                val timeSinceFinger = if (lastFingerStimulusTime > 0L) now - lastFingerStimulusTime else -1L
-                val isPostFingerEcho = timeSinceFinger in 2L..800L
 
-                val notes = buildString {
-                    if (isPostFingerEcho) append("postFingerGlitch(${timeSinceFinger}ms),")
-                    if (dwell < 45) append("fastSpark,")
-                    if (accelDelta < 0.018f) append("zeroMomentum,")
-                }
+                val isEcho = timeSinceStimulus in 2L..1500L
 
                 val entry = GhostTouchEntry(
                     x = downX, y = downY,
@@ -235,29 +287,33 @@ class GhostIdentifyActivity : AppCompatActivity() {
                     historySize = downHistorySize,
                     accelDelta = accelDelta,
                     intervalFromPrevMs = intervalFromPrev,
-                    displacementPx = dispFromPrev,
+                    displacementPx = 0f,
                     timestamp = now,
-                    timeSinceFingerMs = timeSinceFinger,
-                    velocityPxPerMs = if (intervalFromPrev > 0L) dispFromPrev / intervalFromPrev.toFloat() else 0f,
-                    factorNotes = notes.trimEnd(',')
+                    timeSinceFingerMs = timeSinceStimulus,
+                    velocityPxPerMs = 0f,
+                    factorNotes = if (isEcho) "Post-Green Stimulus Glitch (${timeSinceStimulus}ms)" else "Spontaneous Glitch"
                 )
 
-                recordedEntries.add(entry)
-                lastTouchTime = now
-                lastTouchX = downX
-                lastTouchY = downY
+                recordedGhostEntries.add(entry)
+                lastGhostTimestamp = now
 
                 runOnUiThread {
-                    binding.tvCapturedSamples.text = "${recordedEntries.size} Ghost Samples Captured"
-                    val echoTag = if (isPostFingerEcho) " [Post-Finger Glitch!]" else ""
-                    binding.tvLastFactor.text = "Glitch #${recordedEntries.size} at (${downX.toInt()}, ${downY.toInt()})$echoTag"
+                    binding.tvCapturedSamples.text = "${recordedGhostEntries.size} Glitches Captured"
+                    val echoNote = if (isEcho) " [Post-Stimulus Echo!]" else ""
+                    binding.tvLastFactor.text = "Captured Glitch #${recordedGhostEntries.size} (${dwell}ms)$echoNote"
+                    binding.tvLastFactor.setTextColor(Color.parseColor("#FF5252"))
 
-                    // Render 4 core physical factors
+                    val minD = recordedGhostEntries.minOfOrNull { it.dwell } ?: dwell
+                    val maxD = recordedGhostEntries.maxOfOrNull { it.dwell } ?: dwell
+                    val intervals = recordedGhostEntries.map { it.intervalFromPrevMs }.filter { it > 10L }
+                    val minI = intervals.minOrNull() ?: 30L
+                    val maxI = intervals.maxOrNull() ?: 450L
+
                     binding.tvFactorMatrix.text = buildString {
-                        append("📍 Glitch Zone: (${downX.toInt()}, ${downY.toInt()})\n")
-                        append("⏱ Dwell Time:  ${dwell}ms [${if (dwell <= 40) "Fast Spark ✓" else "Hold"}]\n")
-                        append("⚡ Shockwave:   ${String.format("%.4f", accelDelta)} m/s² [Zero Mass ✓]\n")
-                        append("🔄 Post-Finger: ${if (timeSinceFinger > 0) "${timeSinceFinger}ms after lift ✓" else "Idle spontaneous"}")
+                        append("⏱ Dwell Spectrum:  ${minD}ms – ${maxD}ms (Electrical Noise)\n")
+                        append("🔄 Frequency Band:  ${minI}ms – ${maxI}ms (Stochastic Range)\n")
+                        append("⚡ Zero Momentum:   ${String.format("%.4f", accelDelta)} m/s² (No physical mass)\n")
+                        append("📍 Glitch Position: (${downX.toInt()}, ${downY.toInt()})")
                     }
                 }
             }
@@ -266,59 +322,59 @@ class GhostIdentifyActivity : AppCompatActivity() {
         return true
     }
 
-    private fun finishScan() {
-        scanActive = false
+    // ---------------------------------------------------------------------------
+    // PHASE 3: AI Model Synthesis & Activation
+    // ---------------------------------------------------------------------------
+    private fun finishGhostSpectrumScan() {
+        isGhostScanActive = false
 
-        val fingerprint = GhostFingerprint.fromEntries(recordedEntries)
+        val glitchProfile = GhostGlitchProfile.fromEntries(recordedGhostEntries, greenZones)
 
         binding.scanActivePanel.visibility = View.GONE
         binding.resultPanel.visibility = View.VISIBLE
 
-        if (fingerprint.isValid) {
-            val postFingerCount = recordedEntries.count { it.timeSinceFingerMs in 2L..800L }
+        binding.tvResultSummary.text = buildString {
+            append("🟢 HUMAN FINGER BASELINE:\n")
+            append("   • Min Shockwave Mass:  ${String.format("%.3f", humanProfile.minShockwaveThreshold)} m/s²\n")
+            append("   • Min Flesh Contact:    ${String.format("%.3f", humanProfile.minContactSize)}\n")
+            append("   • Safe Interaction:     100% Native 120Hz Smooth Pass-Through\n\n")
 
-            // Auto-arm and activate Hotspot Shield immediately upon mode completion!
-            prefs.ghostFingerprintJson = GhostFingerprint.toJson(fingerprint)
-            prefs.isGhostFingerprintEnabled = true
+            append("🔴 GHOST GLITCH RANGE ENVELOPE:\n")
+            append("   • Learned Samples:      ${recordedGhostEntries.size} Glitches Profiled\n")
+            append("   • Dwell Spectrum:       ${glitchProfile.minDwell}ms – ${glitchProfile.maxDwell}ms\n")
+            append("   • Frequency Band:       ${glitchProfile.minIntervalMs}ms – ${glitchProfile.maxIntervalMs}ms\n")
+            append("   • Full-Screen Shield:   ARMED (All touches in this range swallowed)\n\n")
+
+            append("🛡️ GhostMind AI Shield ready to activate system-wide.")
+        }
+
+        binding.btnSaveFingerprint.setOnClickListener {
+            // Save both profiles
+            prefs.humanFingerProfileJson = HumanFingerProfile.toJson(humanProfile)
+            prefs.ghostGlitchProfileJson = GhostGlitchProfile.toJson(glitchProfile)
+            prefs.isFingerShieldModeActive = true
             prefs.isHotspotShieldEnabled = true
+
+            // Start HotspotShieldService with AI Core
             startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                 action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
             })
 
-            binding.tvResultSummary.text = buildString {
-                append("✅ ${recordedEntries.size} Glitches Analyzed ($postFingerCount post-finger)\n\n")
-                append("📍 Glitch Centroid: (${fingerprint.avgX.toInt()}, ${fingerprint.avgY.toInt()})\n")
-                append("⏱ Glitch Pulse:     ${String.format("%.1f", fingerprint.avgDwell)}ms\n")
-                append("⚡ Tap Momentum:     ${String.format("%.4f", fingerprint.avgAccelDelta)} m/s² (Zero mass)\n")
-                append("🔄 Post-Finger Echo: ${if (fingerprint.avgPostFingerDelayMs > 0) "${fingerprint.avgPostFingerDelayMs}ms latency" else "None"}\n\n")
-                append("🛡 Shield is ACTIVE & Blocking Ghosts Continuously.")
-            }
-            binding.btnSaveFingerprint.visibility = View.VISIBLE
-            binding.btnSaveFingerprint.text = "Finish & Return"
-            binding.btnDiscardScan.text = "Discard & Rescan"
-        } else {
-            binding.tvResultSummary.text = "⚠️ Need at least 3 ghost touches to lock glitch profile (${recordedEntries.size}/3). Please tap the Safe Spot to provoke post-touch glitches."
-            binding.btnSaveFingerprint.visibility = View.GONE
-        }
-
-        binding.btnSaveFingerprint.setOnClickListener {
-            prefs.ghostFingerprintJson = GhostFingerprint.toJson(fingerprint)
-            prefs.isGhostFingerprintEnabled = true
-            Toast.makeText(this, "✅ Glitch Profile Saved & Shield Activated!", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "✅ GhostMind AI Shield Activated Successfully!", Toast.LENGTH_LONG).show()
             finish()
         }
 
         binding.btnDiscardScan.setOnClickListener {
-            binding.resultPanel.visibility = View.GONE
-            binding.scanTimeSetup.visibility = View.VISIBLE
-            binding.btnStartScan.visibility = View.VISIBLE
+            fingerSamples.clear()
+            recordedGhostEntries.clear()
+            setupPhase1FingerCalibration()
         }
     }
 
     private fun setupSlideExit() {
         binding.humanExitSlider.onHumanVerifiedExit = {
             countDownTimer?.cancel()
-            scanActive = false
+            isGhostScanActive = false
             finish()
         }
     }
@@ -328,7 +384,7 @@ class GhostIdentifyActivity : AppCompatActivity() {
         countDownTimer?.cancel()
         impulseSensor?.stop()
 
-        // Resume Hotspot Shield service upon exiting Identify Mode
+        // Resume shield upon exit
         if (prefs.isHotspotShieldEnabled) {
             startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                 action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START

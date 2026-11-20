@@ -63,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         // Refresh UI
         updateDashboard()
         updateShieldButton()
+        updateSPenButton()
         renderActiveProfile(prefs.currentProfile)
     }
 
@@ -278,6 +279,34 @@ class MainActivity : AppCompatActivity() {
                 action = shieldAction
             })
             updateShieldButton()
+        }
+
+        // Dedicated S Pen Mode toggle
+        binding.btnToggleSPenMode.setOnClickListener {
+            prefs.isSPenModeActive = !prefs.isSPenModeActive
+            val spenAction = if (prefs.isSPenModeActive) {
+                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_ENABLE_SPEN_MODE
+            } else {
+                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_DISABLE_SPEN_MODE
+            }
+            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                action = spenAction
+            })
+            updateSPenButton()
+            val status = if (prefs.isSPenModeActive) "Dedicated S Pen Mode: Full-Time Active" else "Dedicated S Pen Mode: Deactivated"
+            Toast.makeText(this, status, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun updateSPenButton() {
+        if (prefs.isSPenModeActive) {
+            binding.btnToggleSPenMode.text = "Dedicated S Pen Mode: ON (Active EMR Priority)"
+            binding.btnToggleSPenMode.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+            binding.btnToggleSPenMode.strokeColor = ContextCompat.getColorStateList(this, R.color.accent_cyan)
+        } else {
+            binding.btnToggleSPenMode.text = "Dedicated S Pen Mode: OFF (Tap to Activate)"
+            binding.btnToggleSPenMode.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.btnToggleSPenMode.strokeColor = ContextCompat.getColorStateList(this, R.color.card_border)
         }
     }
 

@@ -61,6 +61,23 @@ class GuardianPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_FINGERPRINT_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_FINGERPRINT_ENABLED, value).apply()
 
+    // v2.0 GhostMind AI Profiles
+    var humanFingerProfileJson: String
+        get() = prefs.getString(KEY_HUMAN_FINGER_PROFILE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_HUMAN_FINGER_PROFILE, value).apply()
+
+    var ghostGlitchProfileJson: String
+        get() = prefs.getString(KEY_GHOST_GLITCH_PROFILE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GHOST_GLITCH_PROFILE, value).apply()
+
+    var isSPenModeActive: Boolean
+        get() = prefs.getBoolean(KEY_SPEN_MODE_ACTIVE, false)
+        set(value) = prefs.edit().putBoolean(KEY_SPEN_MODE_ACTIVE, value).apply()
+
+    var isFingerShieldModeActive: Boolean
+        get() = prefs.getBoolean(KEY_FINGER_SHIELD_MODE, true)
+        set(value) = prefs.edit().putBoolean(KEY_FINGER_SHIELD_MODE, value).apply()
+
     companion object {
         private const val PREF_NAME = "ghost_touch_guardian_prefs"
         private const val KEY_PROFILE_ID = "pref_profile_id"
@@ -74,5 +91,9 @@ class GuardianPreferences(context: Context) {
         private const val KEY_CALIBRATED_VARIANCE = "pref_calibrated_variance"
         private const val KEY_GHOST_FINGERPRINT = "pref_ghost_fingerprint"
         private const val KEY_FINGERPRINT_ENABLED = "pref_fingerprint_enabled"
+        private const val KEY_HUMAN_FINGER_PROFILE = "pref_human_finger_profile"
+        private const val KEY_GHOST_GLITCH_PROFILE = "pref_ghost_glitch_profile"
+        private const val KEY_SPEN_MODE_ACTIVE = "pref_spen_mode_active"
+        private const val KEY_FINGER_SHIELD_MODE = "pref_finger_shield_mode"
     }
 }

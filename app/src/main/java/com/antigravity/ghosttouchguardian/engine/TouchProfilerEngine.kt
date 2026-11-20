@@ -25,6 +25,10 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     /** Learned ghost fingerprint from Identify Mode (multi-dimensional ghost profile) */
     var ghostFingerprint: GhostFingerprint = GhostFingerprint.empty()
 
+    /** v2.0 GhostMind AI Core */
+    var ghostMindCore: com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore =
+        com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore()
+
     // Telemetry callbacks
     var onAnomalyDetected: ((type: Byte, x: Float, y: Float, dwell: Int, factorReason: String) -> Unit)? = null
     var onHumanIgnoredInGhostMode: ((x: Float, y: Float, dwell: Int) -> Unit)? = null
@@ -262,6 +266,14 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                         // Fingerprint matched — multi-factor ghost (learned from Identify Mode)
                         type = CompactTouchBuffer.TYPE_GHOST_HOTSPOT
                         factorReason = "Fingerprint Ghost (score=${String.format("%.2f", fingerprintScore)}, dwell=${dwell}ms)"
+                    }
+                    // v2.0 GhostMind AI range classification:
+                    // If AI model is calibrated and classifies as ghost (stochastic frequency or dwell spectrum)
+                    ghostMindCore.ghostProfile.isValid && !isHumanConfirmed &&
+                            ghostMindCore.classify(toolType, dwell, size, pressure, if (forcedImpulse == false) 0.005f else accelDelta, intervalLiftToDown, deltaSinceLastUp, timeSinceStylusMs).isGhost -> {
+                        val aiResult = ghostMindCore.classify(toolType, dwell, size, pressure, if (forcedImpulse == false) 0.005f else accelDelta, intervalLiftToDown, deltaSinceLastUp, timeSinceStylusMs)
+                        type = aiResult.type
+                        factorReason = aiResult.reason
                     }
                     matchesCustomRule && !isHumanConfirmed -> {
                         // User's custom block rule matched

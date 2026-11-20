@@ -80,6 +80,11 @@ class TestLabActivity : AppCompatActivity() {
         // Load ghost fingerprint from Identify Mode
         engine.ghostFingerprint = GhostFingerprint.fromJson(prefs.ghostFingerprintJson)
 
+        // Load GhostMind AI Profiles
+        engine.ghostMindCore.humanProfile = com.antigravity.ghosttouchguardian.model.HumanFingerProfile.fromJson(prefs.humanFingerProfileJson)
+        engine.ghostMindCore.ghostProfile = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile.fromJson(prefs.ghostGlitchProfileJson)
+        engine.ghostMindCore.isSPenModeActive = prefs.isSPenModeActive
+
         binding.labTouchCanvasView.profiler = engine
         binding.labTouchCanvasView.hotspots = zones
 

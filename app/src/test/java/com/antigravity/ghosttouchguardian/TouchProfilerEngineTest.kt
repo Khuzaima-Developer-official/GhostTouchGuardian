@@ -445,4 +445,107 @@ class TouchProfilerEngineTest {
         assertEquals(1L, engine.buffer.totalHumanCount)
         assertEquals(0L, engine.buffer.totalGhostCount)
     }
+
+    @Test
+    fun testGhostMindCoreStochasticFrequencyRange() {
+        // Calibrate AI ghost glitch profile with stochastic range: dwell [10..80ms], interval [30..600ms]
+        val ghostProfile = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile(
+            minDwell = 10,
+            maxDwell = 80,
+            minIntervalMs = 30L,
+            maxIntervalMs = 600L,
+            maxAccelDelta = 0.018f,
+            sampleCount = 5
+        )
+        engine.ghostMindCore.ghostProfile = ghostProfile
+
+        // Glitch 1: interval 50ms, dwell 25ms
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 300f, y = 300f, eventTime = 30000L)
+        val res1 = engine.processTouch(MotionEvent.ACTION_UP, x = 300f, y = 300f, eventTime = 30025L, downTime = 30000L, forcedImpulse = false)
+        assertEquals(CompactTouchBuffer.TYPE_GHOST_HOTSPOT, res1)
+
+        // Glitch 2: interval changes to 280ms (fluctuating frequency!), dwell 40ms
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 310f, y = 320f, eventTime = 30305L)
+        val res2 = engine.processTouch(MotionEvent.ACTION_UP, x = 310f, y = 320f, eventTime = 30345L, downTime = 30305L, forcedImpulse = false)
+        assertEquals(CompactTouchBuffer.TYPE_GHOST_HOTSPOT, res2)
+
+        // Glitch 3: interval changes to 520ms (still within range [30..600ms]), dwell 30ms
+        engine.processTouch(MotionEvent.ACTION_DOWN, x = 305f, y = 310f, eventTime = 30865L)
+        val res3 = engine.processTouch(MotionEvent.ACTION_UP, x = 305f, y = 310f, eventTime = 30895L, downTime = 30865L, forcedImpulse = false)
+        assertEquals(CompactTouchBuffer.TYPE_GHOST_HOTSPOT, res3)
+
+        assertEquals(3L, engine.buffer.totalGhostCount)
+    }
+
+    @Test
+    fun testGreenSafeZoneStimulusImmunity() {
+        val greenZone = com.antigravity.ghosttouchguardian.model.GreenSafeZone(100f, 100f, 400f, 400f, "Safe Pad")
+        val ghostProfile = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile.defaultProfile().copy(sampleCount = 5)
+        val aiCore = com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore(ghostProfile = ghostProfile)
+
+        // Inside Green Zone, even a zero-momentum touch is classified as HUMAN Safe Stimulus
+        val resInside = aiCore.classify(
+            toolType = MotionEvent.TOOL_TYPE_FINGER,
+            dwell = 25,
+            size = 0.01f,
+            pressure = 0.01f,
+            accelDelta = 0.005f,
+            inGreenZone = true
+        )
+        assertTrue("Touches inside Green Safe Zone must NEVER be ghost", !resInside.isGhost)
+
+        // Outside Green Zone with zero momentum, it is evaluated as candidate ghost
+        val resOutside = aiCore.classify(
+            toolType = MotionEvent.TOOL_TYPE_FINGER,
+            dwell = 25,
+            size = 0.01f,
+            pressure = 0.01f,
+            accelDelta = 0.005f,
+            inGreenZone = false
+        )
+        assertTrue("Outside Green Zone zero-momentum spark must be ghost", resOutside.isGhost)
+    }
+
+    @Test
+    fun testDedicatedSPenModeActiveSuppression() {
+        val aiCore = com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore(isSPenModeActive = true)
+
+        // 1. S Pen stylus touches pass 100%
+        val stylusRes = aiCore.classify(
+            toolType = MotionEvent.TOOL_TYPE_STYLUS,
+            dwell = 100, size = 0.05f, pressure = 0.5f, accelDelta = 0.01f
+        )
+        assertEquals(CompactTouchBuffer.TYPE_SPEN, stylusRes.type)
+        assertTrue(!stylusRes.isGhost)
+
+        // 2. Trailing capacitive noise during S Pen mode is suppressed
+        val noiseRes = aiCore.classify(
+            toolType = MotionEvent.TOOL_TYPE_FINGER,
+            dwell = 40, size = 0.01f, pressure = 0.01f, accelDelta = 0.008f,
+            timeSinceLastStylusUp = 500L
+        )
+        assertTrue("Capacitive noise in S Pen Mode must be suppressed", noiseRes.isGhost)
+    }
+
+    @Test
+    fun testProfileJsonSerialization() {
+        val human = com.antigravity.ghosttouchguardian.model.HumanFingerProfile(
+            minShockwaveThreshold = 0.021f, minContactSize = 0.042f, minPressure = 0.09f, minDwell = 35, maxTapDwell = 260, sampleCount = 5
+        )
+        val jsonHuman = com.antigravity.ghosttouchguardian.model.HumanFingerProfile.toJson(human)
+        val parsedHuman = com.antigravity.ghosttouchguardian.model.HumanFingerProfile.fromJson(jsonHuman)
+        assertEquals(0.021f, parsedHuman.minShockwaveThreshold, 0.001f)
+        assertEquals(0.042f, parsedHuman.minContactSize, 0.001f)
+        assertEquals(5, parsedHuman.sampleCount)
+
+        val ghost = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile(
+            minDwell = 12, maxDwell = 85, minIntervalMs = 40L, maxIntervalMs = 550L, maxAccelDelta = 0.017f, sampleCount = 6
+        )
+        val jsonGhost = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile.toJson(ghost)
+        val parsedGhost = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile.fromJson(jsonGhost)
+        assertEquals(12, parsedGhost.minDwell)
+        assertEquals(85, parsedGhost.maxDwell)
+        assertEquals(40L, parsedGhost.minIntervalMs)
+        assertEquals(550L, parsedGhost.maxIntervalMs)
+    }
 }
