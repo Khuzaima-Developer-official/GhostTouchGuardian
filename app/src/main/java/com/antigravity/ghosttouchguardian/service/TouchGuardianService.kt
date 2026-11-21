@@ -210,6 +210,18 @@ class TouchGuardianService : Service() {
         }
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (prefs.isGuardianEnabled) {
+            val restartIntent = Intent(applicationContext, TouchGuardianService::class.java).apply {
+                action = ACTION_START
+            }
+            try {
+                ContextCompat.startForegroundService(applicationContext, restartIntent)
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         impulseSensor?.stop()

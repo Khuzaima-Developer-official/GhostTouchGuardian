@@ -108,6 +108,8 @@ class HotspotShieldService : Service() {
         }
     }
 
+    private var screenReceiver: ScreenStateReceiver? = null
+
     override fun onCreate() {
         super.onCreate()
         prefs = GuardianPreferences(this)
@@ -122,6 +124,44 @@ class HotspotShieldService : Service() {
             }
             start()
         }
+
+        // Direct Screen State Receiver:
+        // Automatically manages sensor sleep & screen wake overlay activation
+        screenReceiver = ScreenStateReceiver(
+            onScreenOn = {
+                // 1. Re-activate sensor
+                impulseSensor.start()
+                // 2. Ensure lock screen / app overlay is active
+                if (checkOverlayPermission()) {
+                    if (overlayView == null) {
+                        attachOverlay()
+                    }
+                }
+                // 3. Screen wake ghost-burst guard
+                isScreenWakeGuardActive = true
+                handler.removeCallbacks(screenWakeGuardOff)
+                handler.postDelayed(screenWakeGuardOff, 2000L)
+                reArmShieldDirect()
+                overlayView?.postInvalidate()
+            },
+            onScreenOff = {
+                // Screen turned off: Stop impulse sensor to completely eliminate battery & CPU drain
+                impulseSensor.stop()
+                reArmShieldDirect()
+            }
+        )
+
+        val filter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            screenReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         reloadProfiles()
         if (checkOverlayPermission()) {
@@ -368,10 +408,12 @@ class HotspotShieldService : Service() {
                 @Suppress("DEPRECATION")
                 WindowManager.LayoutParams.TYPE_PHONE
             },
+            @Suppress("DEPRECATION")
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -484,8 +526,37 @@ class HotspotShieldService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isShieldRunning = false
+        screenReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        screenReceiver = null
         removeOverlay()
         impulseSensor.stop()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // If shield or S Pen mode is active, DO NOT STOP!
+        // Swiping app from Recent Apps must NEVER kill active touch protection!
+        if (prefs.isHotspotShieldEnabled || prefs.isSPenModeActive) {
+            val restartIntent = Intent(applicationContext, HotspotShieldService::class.java).apply {
+                action = if (prefs.isSPenModeActive) ACTION_ENABLE_SPEN_MODE else ACTION_START
+            }
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(applicationContext, restartIntent)
+            } catch (_: Exception) {}
+
+            val restartPendingIntent = PendingIntent.getService(
+                applicationContext, 1001, restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            alarmManager?.set(
+                android.app.AlarmManager.ELAPSED_REALTIME,
+                android.os.SystemClock.elapsedRealtime() + 500L,
+                restartPendingIntent
+            )
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
