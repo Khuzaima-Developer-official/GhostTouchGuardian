@@ -54,6 +54,15 @@ class CoPilotTrainerActivity : AppCompatActivity() {
     private val movePoints = mutableListOf<Pair<Float, Float>>()
 
     private var latestVector: ExtendedTouchVector? = null
+    private val recentUnconfirmedVectors = mutableListOf<ExtendedTouchVector>()
+
+    private var currentMode = MODE_INTERACTIVE
+
+    companion object {
+        const val MODE_AUTO_GHOST = 0
+        const val MODE_INTERACTIVE = 1
+        const val MODE_AUTO_FINGER = 2
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +100,8 @@ class CoPilotTrainerActivity : AppCompatActivity() {
     }
 
     private fun setupButtons() {
+        setupModeSelectors()
+
         binding.btnMarkAsGhost.setOnClickListener {
             val vec = latestVector
             if (vec == null) {
@@ -122,6 +133,122 @@ class CoPilotTrainerActivity : AppCompatActivity() {
             binding.tvLiveVerdict.text = "✅ CONFIRMED: REAL FINGER TOUCH!"
             binding.tvLiveVerdict.setTextColor(Color.parseColor("#22C55E"))
             Toast.makeText(this, "✅ Learned! This pattern confirmed as HUMAN FINGER.", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnThisFingerRestGhost.setOnClickListener {
+            val thisVec = latestVector
+            if (thisVec == null) {
+                Toast.makeText(this, "Wait for a touch to occur first!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // 1. Mark this specific touch as REAL HUMAN FINGER
+            lastHumanLiftTime = System.currentTimeMillis()
+            masterClassifier.supervise(thisVec, actuallyGhost = false)
+
+            // 2. Mark all other recent touches in history as GHOST
+            var ghostCount = 0
+            for (v in recentUnconfirmedVectors) {
+                if (v !== thisVec) {
+                    masterClassifier.supervise(v, actuallyGhost = true)
+                    ghostCount++
+                }
+            }
+            recentUnconfirmedVectors.clear()
+
+            vibrateFeedback(isGhost = false)
+            updateBadges()
+            saveBrainAsync()
+
+            binding.tvLiveVerdict.text = "🎯 LEARNED: THIS = FINGER, $ghostCount OTHERS = GHOST!"
+            binding.tvLiveVerdict.setTextColor(Color.parseColor("#38BDF8"))
+            Toast.makeText(
+                this,
+                "✅ Fast Triage: Current touch confirmed as FINGER, $ghostCount other glitches trained as GHOST!",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        binding.btnMarkAllRecentAsGhost.setOnClickListener {
+            if (recentUnconfirmedVectors.isEmpty()) {
+                val vec = latestVector
+                if (vec != null) {
+                    recentUnconfirmedVectors.add(vec)
+                } else {
+                    Toast.makeText(this, "No recent glitches to batch-mark!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+            }
+
+            val count = recentUnconfirmedVectors.size
+            for (v in recentUnconfirmedVectors) {
+                masterClassifier.supervise(v, actuallyGhost = true)
+            }
+            recentUnconfirmedVectors.clear()
+            vibrateFeedback(isGhost = true)
+            updateBadges()
+            saveBrainAsync()
+
+            binding.tvLiveVerdict.text = "⚡ BATCH COMPLETED: $count GLITCHES MARKED AS GHOST!"
+            binding.tvLiveVerdict.setTextColor(Color.parseColor("#EF4444"))
+            Toast.makeText(this, "✅ Batch Saved: All $count glitches added to ghost memory!", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun setupModeSelectors() {
+        binding.btnModeAutoGhost.setOnClickListener {
+            setFastMode(MODE_AUTO_GHOST)
+        }
+        binding.btnModeInteractive.setOnClickListener {
+            setFastMode(MODE_INTERACTIVE)
+        }
+        binding.btnModeAutoFinger.setOnClickListener {
+            setFastMode(MODE_AUTO_FINGER)
+        }
+        updateModeUI()
+    }
+
+    private fun setFastMode(mode: Int) {
+        currentMode = mode
+        updateModeUI()
+        val msg = when (mode) {
+            MODE_AUTO_GHOST -> "🔥 AUTO GHOST HARVEST: All incoming touches automatically marked as GHOST (Zero clicks needed)!"
+            MODE_AUTO_FINGER -> "🟢 AUTO FINGER MODE: Type/tap naturally; all touches recorded as your finger!"
+            else -> "✋ 1-BY-1 CO-PILOT: Interactive single touch review mode."
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
+    private fun updateModeUI() {
+        val activeBg = Color.parseColor("#2563EB")
+        val ghostActiveBg = Color.parseColor("#EF4444")
+        val fingerActiveBg = Color.parseColor("#22C55E")
+
+        when (currentMode) {
+            MODE_AUTO_GHOST -> {
+                binding.btnModeAutoGhost.setBackgroundColor(ghostActiveBg)
+                binding.btnModeAutoGhost.setTextColor(Color.WHITE)
+                binding.btnModeInteractive.setBackgroundColor(Color.TRANSPARENT)
+                binding.btnModeInteractive.setTextColor(Color.parseColor("#94A3B8"))
+                binding.btnModeAutoFinger.setBackgroundColor(Color.TRANSPARENT)
+                binding.btnModeAutoFinger.setTextColor(Color.parseColor("#94A3B8"))
+            }
+            MODE_INTERACTIVE -> {
+                binding.btnModeAutoGhost.setBackgroundColor(Color.TRANSPARENT)
+                binding.btnModeAutoGhost.setTextColor(Color.parseColor("#FF5252"))
+                binding.btnModeInteractive.setBackgroundColor(activeBg)
+                binding.btnModeInteractive.setTextColor(Color.WHITE)
+                binding.btnModeAutoFinger.setBackgroundColor(Color.TRANSPARENT)
+                binding.btnModeAutoFinger.setTextColor(Color.parseColor("#22C55E"))
+            }
+            MODE_AUTO_FINGER -> {
+                binding.btnModeAutoGhost.setBackgroundColor(Color.TRANSPARENT)
+                binding.btnModeAutoGhost.setTextColor(Color.parseColor("#94A3B8"))
+                binding.btnModeInteractive.setBackgroundColor(Color.TRANSPARENT)
+                binding.btnModeInteractive.setTextColor(Color.parseColor("#94A3B8"))
+                binding.btnModeAutoFinger.setBackgroundColor(fingerActiveBg)
+                binding.btnModeAutoFinger.setTextColor(Color.parseColor("#070A11"))
+            }
         }
     }
 
@@ -176,6 +303,15 @@ class CoPilotTrainerActivity : AppCompatActivity() {
             return super.dispatchTouchEvent(event)
         }
 
+        // Mode selector bar touches pass to buttons
+        val modeBarBounds = binding.modeSelectorBar.let {
+            val loc = IntArray(2); it.getLocationOnScreen(loc)
+            Rect(loc[0], loc[1], loc[0] + it.width, loc[1] + it.height)
+        }
+        if (modeBarBounds.contains(event.rawX.toInt(), event.rawY.toInt())) {
+            return super.dispatchTouchEvent(event)
+        }
+
         // Decision panel button touches pass to buttons
         val decisionBounds = binding.decisionPanel.let {
             val loc = IntArray(2); it.getLocationOnScreen(loc)
@@ -222,11 +358,40 @@ class CoPilotTrainerActivity : AppCompatActivity() {
                 )
                 latestVector = vector
 
-                // Evaluate with Master AI Brain
-                val decision = masterClassifier.classify(vector, event.getToolType(0))
-
-                binding.tvArenaHint.visibility = View.GONE
-                updateDecisionUI(decision, vector, downX, downY)
+                // Fast Batch Modes: Zero manual clicks needed!
+                when (currentMode) {
+                    MODE_AUTO_GHOST -> {
+                        masterClassifier.supervise(vector, actuallyGhost = true)
+                        vibrateFeedback(isGhost = true)
+                        updateBadges()
+                        saveBrainAsync()
+                        binding.tvArenaHint.visibility = View.GONE
+                        binding.tvLiveVerdict.text = "🔴 AUTO-LEARNED AS GHOST #${masterClassifier.getSupervisoryCount()} (${vector.dwell.toInt()}ms)"
+                        binding.tvLiveVerdict.setTextColor(Color.parseColor("#EF4444"))
+                        binding.decisionPanel.strokeColor = Color.parseColor("#EF4444")
+                        binding.tvTouchDetails.text = "Water glitch auto-absorbed without clicking! Dwell: ${vector.dwell.toInt()}ms | Pos: (${downX.toInt()}, ${downY.toInt()})"
+                    }
+                    MODE_AUTO_FINGER -> {
+                        lastHumanLiftTime = now
+                        masterClassifier.supervise(vector, actuallyGhost = false)
+                        vibrateFeedback(isGhost = false)
+                        updateBadges()
+                        saveBrainAsync()
+                        binding.tvArenaHint.visibility = View.GONE
+                        binding.tvLiveVerdict.text = "🟢 AUTO-LEARNED AS REAL FINGER (${vector.dwell.toInt()}ms)"
+                        binding.tvLiveVerdict.setTextColor(Color.parseColor("#22C55E"))
+                        binding.decisionPanel.strokeColor = Color.parseColor("#22C55E")
+                        binding.tvTouchDetails.text = "Finger biometric auto-absorbed! Dwell: ${vector.dwell.toInt()}ms | Tremor: ${String.format("%.2f", vector.microTremorVariance)} px²"
+                    }
+                    else -> {
+                        // MODE_INTERACTIVE: Queue in recent unconfirmed list for 1-tap or batch action
+                        recentUnconfirmedVectors.add(vector)
+                        if (recentUnconfirmedVectors.size > 30) recentUnconfirmedVectors.removeAt(0)
+                        val decision = masterClassifier.classify(vector, event.getToolType(0))
+                        binding.tvArenaHint.visibility = View.GONE
+                        updateDecisionUI(decision, vector, downX, downY)
+                    }
+                }
             }
         }
 
