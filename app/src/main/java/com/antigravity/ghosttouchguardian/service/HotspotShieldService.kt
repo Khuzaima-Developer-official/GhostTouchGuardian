@@ -16,13 +16,18 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import com.antigravity.ghosttouchguardian.data.CompactTouchRepository
 import com.antigravity.ghosttouchguardian.data.GuardianPreferences
 import com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine
 import com.antigravity.ghosttouchguardian.engine.HotspotZone
+import com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector
+import com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine
 import com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore
+import com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier
 import com.antigravity.ghosttouchguardian.model.GhostFingerprint
 import com.antigravity.ghosttouchguardian.model.GhostGlitchProfile
 import com.antigravity.ghosttouchguardian.model.HumanFingerProfile
+import com.antigravity.ghosttouchguardian.model.TouchFeatureVector
 import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
 import kotlin.math.max
 
@@ -45,8 +50,11 @@ class HotspotShieldService : Service() {
     private var overlayParams: WindowManager.LayoutParams? = null
     private var activeZones: List<HotspotZone> = emptyList()
 
-    // AI Mind Core
+    // AI Mind Core & 8D Bayesian Brain & Master Touch Classifier
     private val aiCore = GhostMindCore()
+    private var brainEngine: GhostBrainEngine = GhostBrainEngine()
+    private var masterClassifier: MasterTouchClassifier = MasterTouchClassifier()
+    private lateinit var repository: CompactTouchRepository
 
     private val handler = Handler(Looper.getMainLooper())
     private var isTouchThrough = false
@@ -80,6 +88,7 @@ class HotspotShieldService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefs = GuardianPreferences(this)
+        repository = CompactTouchRepository(this)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         impulseSensor = MechanicalImpulseSensor(this).apply {
             onHumanMotionDetected = {
@@ -130,10 +139,14 @@ class HotspotShieldService : Service() {
             ACTION_ENABLE_SPEN_MODE -> {
                 prefs.isSPenModeActive = true
                 aiCore.isSPenModeActive = true
+                brainEngine.isSPenModeActive = true
+                masterClassifier.isSPenModeActive = true
             }
             ACTION_DISABLE_SPEN_MODE -> {
                 prefs.isSPenModeActive = false
                 aiCore.isSPenModeActive = false
+                brainEngine.isSPenModeActive = false
+                masterClassifier.isSPenModeActive = false
             }
         }
         return START_STICKY
@@ -150,6 +163,12 @@ class HotspotShieldService : Service() {
         aiCore.humanProfile = HumanFingerProfile.fromJson(prefs.humanFingerProfileJson)
         aiCore.ghostProfile = GhostGlitchProfile.fromJson(prefs.ghostGlitchProfileJson)
         aiCore.isSPenModeActive = prefs.isSPenModeActive
+        brainEngine = GhostBrainEngine.fromJson(prefs.ghostBrainEngineJson).apply {
+            isSPenModeActive = prefs.isSPenModeActive
+        }
+        masterClassifier = repository.loadBrain().apply {
+            isSPenModeActive = prefs.isSPenModeActive
+        }
     }
 
     private fun attachOverlay() {
@@ -267,6 +286,10 @@ class HotspotShieldService : Service() {
         }
 
         private var pendingDownTime: Long = 0L
+        private var pendingDownX: Float = 0f
+        private var pendingDownY: Float = 0f
+        private var pendingDownPressure: Float = 0f
+        private val movePoints = mutableListOf<Pair<Float, Float>>()
         private var lastStylusUpTime: Long = 0L
         private var lastHumanUpTime: Long = 0L
         private var lastTouchTime: Long = 0L
@@ -296,7 +319,27 @@ class HotspotShieldService : Service() {
 
             val toolType = event.getToolType(0)
 
-            // S Pen Bypass: S Pen touches ALWAYS pass through cleanly
+            // 1. TIER 0: S Pen Mode 100% Capacitive Muting
+            // When S Pen mode is active:
+            // - Wacom Magnetic EMR (TOOL_TYPE_STYLUS) passes natively
+            // - Capacitive / electrostatic signals (TOOL_TYPE_FINGER / glitches) are 100% MUTED
+            if (prefs.isSPenModeActive) {
+                if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
+                    if (event.actionMasked == MotionEvent.ACTION_UP) {
+                        lastStylusUpTime = event.eventTime
+                    }
+                    passThroughTemporarily()
+                    return false // 100% Native Unrestricted EMR Pass-Through
+                } else {
+                    // MUTE ALL CAPACITIVE SIGNALS: Dropped unconditionally
+                    if (event.actionMasked == MotionEvent.ACTION_UP) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                    }
+                    return true // Swallowed immediately
+                }
+            }
+
+            // Normal S Pen bypass outside S Pen mode
             if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
                 if (event.actionMasked == MotionEvent.ACTION_UP) {
                     lastStylusUpTime = event.eventTime
@@ -326,6 +369,11 @@ class HotspotShieldService : Service() {
                     isPointerDownOnScreen = true
                     lastHumanInteractionTime = event.eventTime
                     pendingDownTime = event.eventTime
+                    pendingDownX = event.x
+                    pendingDownY = event.y
+                    pendingDownPressure = event.pressure
+                    movePoints.clear()
+                    movePoints.add(Pair(event.x, event.y))
                     val now = event.eventTime
                     val interval = if (lastTouchTime > 0L) now - lastTouchTime else -1L
                     lastTouchTime = now
@@ -333,9 +381,6 @@ class HotspotShieldService : Service() {
                     val accelDelta = impulseSensor.getLastAccelDelta()
                     val hasImpulse = impulseSensor.hasMechanicalImpulse(now, windowMs = 80L)
                     val effectiveAccel = if (hasImpulse) max(accelDelta, 0.025f) else accelDelta
-
-                    val timeSinceHuman = if (lastHumanUpTime > 0L) now - lastHumanUpTime else -1L
-                    val timeSinceStylus = if (lastStylusUpTime > 0L) now - lastStylusUpTime else -1L
 
                     // Check if inside any calibrated Green Safe Zone (interactive stimulus)
                     val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
@@ -357,6 +402,7 @@ class HotspotShieldService : Service() {
                 MotionEvent.ACTION_MOVE -> {
                     isPointerDownOnScreen = true
                     lastHumanInteractionTime = event.eventTime
+                    movePoints.add(Pair(event.x, event.y))
                     if (isTouchThrough) {
                         handler.removeCallbacks(reArmRunnable)
                         handler.postDelayed(reArmRunnable, 15_000L)
@@ -379,6 +425,7 @@ class HotspotShieldService : Service() {
                     val now = event.eventTime
                     val timeSinceHuman = if (lastHumanUpTime > 0L) pendingDownTime - lastHumanUpTime else -1L
                     val timeSinceStylus = if (lastStylusUpTime > 0L) pendingDownTime - lastStylusUpTime else -1L
+                    val interval = if (lastTouchTime > 0L) pendingDownTime - lastTouchTime else dwell.toLong()
 
                     val accelDelta = impulseSensor.getLastAccelDelta()
                     val hasImpulse = impulseSensor.hasMechanicalImpulse(pendingDownTime, windowMs = 120L)
@@ -386,27 +433,94 @@ class HotspotShieldService : Service() {
 
                     val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
 
-                    val classification = aiCore.classify(
-                        toolType = toolType,
-                        dwell = dwell,
-                        size = event.size,
-                        pressure = event.pressure,
+                    // Extract 10D Extended Feature Vector for Master AI Brain
+                    val extendedVector = ExtendedTouchVector.extract(
+                        event = event,
+                        dwellMs = dwell,
+                        downX = pendingDownX,
+                        downY = pendingDownY,
+                        downPressure = pendingDownPressure,
                         accelDelta = effectiveAccel,
-                        intervalFromPrevMs = dwell.toLong(),
-                        timeSinceLastHumanUp = timeSinceHuman,
-                        timeSinceLastStylusUp = timeSinceStylus,
-                        inGreenZone = inGreenZone
+                        intervalMs = interval,
+                        timeSinceStimulusMs = if (timeSinceHuman >= 0) timeSinceHuman else timeSinceStylus,
+                        movePoints = movePoints
                     )
 
-                    // Human Invariant: If classified as human, dwell > 65ms, physical impulse, or fleshy contact
-                    if (!classification.isGhost || dwell > 65 || hasImpulse || event.size >= 0.035f || inGreenZone) {
+                    // 1. Check Master Touch Classifier (Active Learning & Micro-Tremor)
+                    val masterDecision = masterClassifier.classify(extendedVector, toolType)
+
+                    // Extract 8D Feature Vector for fallback Bayesian Engine
+                    val featureVector = TouchFeatureVector.extract(
+                        event = event,
+                        dwellMs = dwell,
+                        downX = pendingDownX,
+                        downY = pendingDownY,
+                        accelDelta = effectiveAccel,
+                        intervalMs = interval,
+                        timeSinceStimulusMs = if (timeSinceHuman >= 0) timeSinceHuman else timeSinceStylus
+                    )
+
+                    // Tier 1 & 2 Guardrails:
+                    // If physical impulse, biological tremor, flesh deformation, or normal dwell (>70ms) is present:
+                    val isDefiniteHuman = hasImpulse || event.size >= 0.035f || event.pressure >= 0.10f ||
+                            dwell >= 110 || inGreenZone || extendedVector.microTremorVariance >= 0.60f ||
+                            (aiCore.humanProfile.isValid && aiCore.humanProfile.matchesHuman(dwell, event.size, event.pressure, effectiveAccel)) ||
+                            (!masterDecision.isGhost && masterDecision.confidence >= 0.85f)
+
+                    if (isDefiniteHuman) {
                         lastHumanUpTime = now
+                        brainEngine.learnOnline(featureVector, isGhost = false)
+                        masterClassifier.learnOnline(extendedVector, isGhost = false)
                         if (!isTouchThrough) passThroughTemporarily()
                         return false
                     }
 
-                    // Ghost confirmed: Swallow it!
+                    // If Master Classifier flagged as Ghost (user-confirmed water signature or water droplet static lock)
+                    if (masterDecision.isGhost) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        masterClassifier.learnOnline(extendedVector, isGhost = true)
+                        brainEngine.learnOnline(featureVector, isGhost = true)
+
+                        if (masterClassifier.totalOnlineUpdates % 10L == 0L) {
+                            repository.saveBrain(masterClassifier)
+                            prefs.ghostBrainEngineJson = brainEngine.toJson()
+                        }
+
+                        val cancelEvent = MotionEvent.obtain(event).also {
+                            it.action = MotionEvent.ACTION_CANCEL
+                        }
+                        try {
+                            super.onTouchEvent(cancelEvent)
+                        } catch (_: Exception) {}
+                        cancelEvent.recycle()
+                        return true
+                    }
+
+                    // Tier 3: 8D Bayesian Brain Classification
+                    val brainDecision = brainEngine.classify(featureVector, toolType, inGreenZone)
+
+                    if (!brainDecision.isGhost) {
+                        // Classified as human
+                        lastHumanUpTime = now
+                        if (brainDecision.confidence >= 0.70f) {
+                            brainEngine.learnOnline(featureVector, isGhost = false)
+                            masterClassifier.learnOnline(extendedVector, isGhost = false)
+                        }
+                        if (!isTouchThrough) passThroughTemporarily()
+                        return false
+                    }
+
+                    // Confirmed Ghost: Swallow it and adapt online memory!
                     prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                    brainEngine.learnOnline(featureVector, isGhost = true)
+                    masterClassifier.learnOnline(extendedVector, isGhost = true)
+
+                    // Persist learned brain state periodically
+                    if (brainEngine.totalOnlineUpdates % 10L == 0L) {
+                        repository.saveBrain(masterClassifier)
+                        prefs.ghostBrainEngineJson = brainEngine.toJson()
+                    }
+
                     val cancelEvent = MotionEvent.obtain(event).also {
                         it.action = MotionEvent.ACTION_CANCEL
                     }

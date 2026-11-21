@@ -241,6 +241,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupCalibrationCard() {
+        // AI Co-Pilot (Teach AI Brain) click
+        binding.btnLaunchCoPilot.setOnClickListener {
+            startActivity(Intent(this, CoPilotTrainerActivity::class.java))
+        }
+
         // Ghost Identify (Fingerprint Learning) click
         binding.btnGhostIdentify.setOnClickListener {
             startActivity(Intent(this, GhostIdentifyActivity::class.java))
@@ -303,7 +308,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSPenButton() {
         if (prefs.isSPenModeActive) {
-            binding.btnToggleSPenMode.text = "Dedicated S Pen Mode: ON (Active EMR Priority)"
+            binding.btnToggleSPenMode.text = "Dedicated S Pen Mode: ON (ALL CAPACITIVE MUTED)"
             binding.btnToggleSPenMode.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
             binding.btnToggleSPenMode.strokeColor = ContextCompat.getColorStateList(this, R.color.accent_cyan)
         } else {
@@ -318,11 +323,13 @@ class MainActivity : AppCompatActivity() {
         val hasZones = prefs.savedHotspotsJson.isNotBlank()
         val hasFp = prefs.ghostFingerprintJson.isNotBlank()
         val hasAiProfile = prefs.ghostGlitchProfileJson.isNotBlank()
-        val isCalibrated = hasZones || hasFp || hasAiProfile
+        val hasBrain = prefs.ghostBrainEngineJson.isNotBlank()
+        val isCalibrated = hasZones || hasFp || hasAiProfile || hasBrain
         val zones = com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine.parseZonesFromJson(prefs.savedHotspotsJson)
 
         if (prefs.isHotspotShieldEnabled && isCalibrated) {
             val guardDetails = when {
+                hasBrain -> "8D Bayesian AI Brain"
                 hasAiProfile -> "GhostMind AI Profile"
                 hasFp -> "Fingerprint & ${zones.size} Zones"
                 else -> "${zones.size} Zones"
@@ -349,9 +356,18 @@ class MainActivity : AppCompatActivity() {
             binding.tvAiFingerStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
         }
 
-        // 2. Ghost Glitch Spectrum
+        // 2. 8D Bayesian Ghost Brain & S23 Ultra Touch Master
+        val masterClassifier = com.antigravity.ghosttouchguardian.data.CompactTouchRepository(this).loadBrain()
+        val brainEngine = com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine.fromJson(prefs.ghostBrainEngineJson)
         val ghostProfile = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile.fromJson(prefs.ghostGlitchProfileJson)
-        if (ghostProfile.isValid) {
+
+        if (masterClassifier.totalUserCorrections > 0L || masterClassifier.getSupervisoryCount() > 0) {
+            binding.tvAiGhostStatus.text = "🔴 S23U Touch Master: ACTIVE (${masterClassifier.getSupervisoryCount()} water signatures, ${masterClassifier.totalUserCorrections} corrections)"
+            binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+        } else if (brainEngine.ghostCluster.sampleCount > 5 || brainEngine.totalOnlineUpdates > 0L) {
+            binding.tvAiGhostStatus.text = "🔴 8D AI Brain: ACTIVE (${brainEngine.ghostCluster.sampleCount} glitches, ${brainEngine.totalOnlineUpdates} online updates)"
+            binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+        } else if (ghostProfile.isValid) {
             binding.tvAiGhostStatus.text = "🔴 Ghost Spectrum: [${ghostProfile.minDwell}..${ghostProfile.maxDwell}ms], Band [${ghostProfile.minIntervalMs}..${ghostProfile.maxIntervalMs}ms]"
             binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
         } else {
@@ -360,14 +376,14 @@ class MainActivity : AppCompatActivity() {
                 binding.tvAiGhostStatus.text = "🔴 Glitch Map: Calibrated Zone Hotspots"
                 binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
             } else {
-                binding.tvAiGhostStatus.text = "🔴 Ghost Spectrum: Not Calibrated (Tap Step 1 to Scan)"
+                binding.tvAiGhostStatus.text = "🔴 8D Ghost Brain: Not Calibrated (Tap Step 1 to Learn)"
                 binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
             }
         }
 
         // 3. Dedicated S Pen Status
         if (prefs.isSPenModeActive) {
-            binding.tvAiSPenStatus.text = "🖊️ Dedicated S Pen: FULL-TIME ACTIVE (EMR Priority)"
+            binding.tvAiSPenStatus.text = "🖊️ Dedicated S Pen: 100% CAPACITIVE MUTED (EMR Magnetic Pure)"
             binding.tvAiSPenStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
         } else {
             binding.tvAiSPenStatus.text = "🖊️ Dedicated S Pen: OFF (Tap toggle below)"

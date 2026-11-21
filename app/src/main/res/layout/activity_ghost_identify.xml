@@ -21,7 +21,7 @@
             android:id="@+id/tvIdentifyTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="GHOSTMIND AI IDENTIFY (v2.0)"
+            android:text="GHOSTMIND AI 8D IDENTIFY (v3.0)"
             android:textColor="#00E5FF"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -31,7 +31,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="2-Step AI Calibration: 1) Calibrate real finger touch. 2) Provoke &amp; capture ghost touch range."
+            android:text="Dual AI Calibration: 1) Lock real finger biometrics. 2) Provoke &amp; learn 8D ghost glitch cluster with 48dp tiny stimulus pads."
             android:textColor="#94A3B8"
             android:textSize="13sp" />
     </LinearLayout>
@@ -246,45 +246,47 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- GREEN SAFE ZONE 1 (Top Interactive Stimulus) -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardGreenSafeZoneTop"
+        <!-- TINY 48DP FINGERTIP STIMULUS PAD 1 (Top Target) -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="80dp"
-            android:layout_marginTop="10dp"
-            app:cardBackgroundColor="#0B1C14"
-            app:cardCornerRadius="14dp"
-            app:strokeColor="#22C55E"
-            app:strokeWidth="2dp">
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:orientation="vertical">
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardGreenSafeZoneTop"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                app:cardBackgroundColor="#15803D"
+                app:cardCornerRadius="24dp"
+                app:strokeColor="#22C55E"
+                app:strokeWidth="2.5dp">
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🛡️ GREEN SAFE ZONE (STIMULUS PAD)"
-                    android:textColor="#22C55E"
-                    android:textSize="13sp"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="TAP"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
+            </com.google.android.material.card.MaterialCardView>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Tap here freely! NEVER recorded as ghost. Provokes trailing glitches."
-                    android:textColor="#86EFAC"
-                    android:textSize="10sp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:text="🛡️ 48dp Tiny Stimulus Pad: Tap with fingertip to provoke post-touch glitches. (NEVER recorded as ghost)"
+                android:textColor="#86EFAC"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <!-- Live Ghost Spectrum Matrix Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             app:cardBackgroundColor="#0D1220"
             app:cardCornerRadius="14dp"
             app:strokeColor="#1E293B"
@@ -299,7 +301,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="LEARNED GLITCH SPECTRUM &amp; FREQUENCY ENVELOPE"
+                    android:text="8D AI TENSOR &amp; REAL-TIME CLUSTER METRICS"
                     android:textColor="#38BDF8"
                     android:textSize="11sp"
                     android:textStyle="bold" />
@@ -316,39 +318,41 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- GREEN SAFE ZONE 2 (Bottom Interactive Stimulus) -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardGreenSafeZoneBottom"
+        <!-- TINY 48DP FINGERTIP STIMULUS PAD 2 (Bottom Target) -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="80dp"
-            android:layout_marginTop="10dp"
-            app:cardBackgroundColor="#0B1C14"
-            app:cardCornerRadius="14dp"
-            app:strokeColor="#22C55E"
-            app:strokeWidth="2dp">
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:orientation="vertical">
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardGreenSafeZoneBottom"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                app:cardBackgroundColor="#15803D"
+                app:cardCornerRadius="24dp"
+                app:strokeColor="#22C55E"
+                app:strokeWidth="2.5dp">
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🛡️ GREEN SAFE ZONE (BOTTOM PAD)"
-                    android:textColor="#22C55E"
-                    android:textSize="13sp"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="TAP"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
+            </com.google.android.material.card.MaterialCardView>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Tap to wake up trailing capacitive noise outside."
-                    android:textColor="#86EFAC"
-                    android:textSize="10sp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:text="🛡️ 48dp Pad: Screen is 96% open! All outside glitches captured to train 8D AI Brain."
+                android:textColor="#86EFAC"
+                android:textSize="11sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Phase 3: Result Synthesis Panel -->

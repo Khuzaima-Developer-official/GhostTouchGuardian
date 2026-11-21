@@ -548,4 +548,203 @@ class TouchProfilerEngineTest {
         assertEquals(40L, parsedGhost.minIntervalMs)
         assertEquals(550L, parsedGhost.maxIntervalMs)
     }
+
+    @Test
+    fun test8DBayesianGhostProbability() {
+        val brain = com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine()
+        val ghostVector = com.antigravity.ghosttouchguardian.model.TouchFeatureVector(
+            dwell = 22f,
+            size = 0.014f,
+            pressure = 0.02f,
+            accelDelta = 0.004f, // zero physical momentum
+            interval = 120f,
+            velocity = 0.01f,
+            eccentricity = 1.9f,
+            timeSinceStimulus = 400f
+        )
+        val decision = brain.classify(ghostVector)
+        assertTrue("8D Brain must identify zero-momentum electrical spark as ghost", decision.isGhost)
+        assertTrue("Ghost probability must exceed 70%", decision.ghostProbability >= 0.70f)
+    }
+
+    @Test
+    fun test8DUnknownFrequencyGeneralization() {
+        val brain = com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine()
+        // Glitch with completely random unknown interval (1850ms), but zero physical momentum and tiny flesh
+        val unknownFreqGlitch = com.antigravity.ghosttouchguardian.model.TouchFeatureVector(
+            dwell = 26f,
+            size = 0.012f,
+            pressure = 0.018f,
+            accelDelta = 0.003f, // zero Newtonian shockwave
+            interval = 1850f,   // completely unknown frequency!
+            velocity = 0.01f,
+            eccentricity = 2.1f,
+            timeSinceStimulus = 1850f
+        )
+        val decision = brain.classify(unknownFreqGlitch)
+        assertTrue("Unknown frequency ghost must still be blocked via zero-momentum subspace", decision.isGhost)
+        assertTrue("Ghost confidence must be high", decision.confidence >= 0.70f)
+    }
+
+    @Test
+    fun test100PercentSPenCapacitiveMute() {
+        val brain = com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine(isSPenModeActive = true)
+
+        // 1. S Pen Stylus passes 100% native
+        val stylusVector = com.antigravity.ghosttouchguardian.model.TouchFeatureVector(
+            dwell = 120f, size = 0.05f, pressure = 0.4f, accelDelta = 0.01f, interval = 100f, velocity = 0.1f, eccentricity = 1.1f, timeSinceStimulus = 50f
+        )
+        val stylusDecision = brain.classify(stylusVector, toolType = MotionEvent.TOOL_TYPE_STYLUS)
+        assertTrue("Stylus must NEVER be blocked in S Pen mode", !stylusDecision.isGhost)
+        assertEquals(0.0f, stylusDecision.ghostProbability, 0.001f)
+
+        // 2. Capacitive finger touch is 100% MUTED
+        val fingerVector = com.antigravity.ghosttouchguardian.model.TouchFeatureVector(
+            dwell = 120f, size = 0.05f, pressure = 0.4f, accelDelta = 0.035f, interval = 100f, velocity = 0.1f, eccentricity = 1.1f, timeSinceStimulus = 50f
+        )
+        val fingerDecision = brain.classify(fingerVector, toolType = MotionEvent.TOOL_TYPE_FINGER)
+        assertTrue("Finger / Capacitive touches must be 100% MUTED in S Pen mode", fingerDecision.isGhost)
+        assertEquals(1.0f, fingerDecision.ghostProbability, 0.001f)
+    }
+
+    @Test
+    fun testWelfordOnlineLearningAdaptation() {
+        val brain = com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine()
+        val initialCount = brain.ghostCluster.sampleCount
+        val initialDwellMean = brain.ghostCluster.mean[0]
+
+        // Ingest a new ghost glitch with 35ms dwell
+        val newGlitch = com.antigravity.ghosttouchguardian.model.TouchFeatureVector(
+            dwell = 35f, size = 0.015f, pressure = 0.02f, accelDelta = 0.005f, interval = 150f, velocity = 0.01f, eccentricity = 1.5f, timeSinceStimulus = 200f
+        )
+        brain.learnOnline(newGlitch, isGhost = true)
+
+        assertEquals(initialCount + 1, brain.ghostCluster.sampleCount)
+        assertEquals(1L, brain.totalOnlineUpdates)
+        assertTrue("Welford mean must adapt towards new observation", brain.ghostCluster.mean[0] != initialDwellMean)
+    }
+
+    @Test
+    fun testMasterTouchClassifierCoordinateAgnosticGhostDetection() {
+        val master = com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier()
+
+        // S23 Ultra water damage ghost touch: 35ms dwell, low size, zero physical momentum, zero tremor
+        val waterGlitchVector = com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector(
+            dwell = 35f,
+            size = 0.020f,
+            pressure = 0.03f,
+            accelDelta = 0.003f, // zero Newtonian impact
+            pressureGradient = 0.0001f,
+            microTremorVariance = 0.02f, // zero biological tremor (water droplet)
+            eccentricity = 2.4f,
+            velocity = 0.01f,
+            interval = 130f,
+            timeSinceStimulus = 300f
+        )
+
+        // Must be identified as GHOST regardless of screen coordinate position
+        val decision = master.classify(waterGlitchVector)
+        assertTrue("Master AI must identify water ghost touch anywhere on screen", decision.isGhost)
+        assertTrue("P(Ghost) must be high", decision.ghostProbability >= 0.68f)
+    }
+
+    @Test
+    fun testBiologicalMicroTremorProtectsHuman() {
+        val master = com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier()
+
+        // Human finger holding still on glass: exhibits natural micro-tremor variance >= 0.60 px²
+        val humanHeldFinger = com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector(
+            dwell = 80f,
+            size = 0.040f,
+            pressure = 0.12f,
+            accelDelta = 0.010f,
+            pressureGradient = 0.002f,
+            microTremorVariance = 1.10f, // active involuntary biological micro-tremor
+            eccentricity = 1.2f,
+            velocity = 0.03f,
+            interval = 400f,
+            timeSinceStimulus = 1500f
+        )
+
+        val decision = master.classify(humanHeldFinger)
+        assertTrue("Biological micro-tremor must protect real human touch", !decision.isGhost)
+        assertEquals(0.02f, decision.ghostProbability, 0.01f)
+    }
+
+    @Test
+    fun testWaterDropletStaticLockDetection() {
+        val master = com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier()
+
+        // Water droplet sitting on S23 Ultra screen: 200ms dwell, zero tremor variance, zero impact
+        val waterDroplet = com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector(
+            dwell = 200f,
+            size = 0.025f,
+            pressure = 0.04f,
+            accelDelta = 0.002f,
+            pressureGradient = 0.0001f,
+            microTremorVariance = 0.01f, // dead static, no human tremor
+            eccentricity = 2.0f,
+            velocity = 0.0f,
+            interval = 500f,
+            timeSinceStimulus = 500f
+        )
+
+        val decision = master.classify(waterDroplet)
+        assertTrue("Water droplet with zero tremor must be detected as static lock", decision.isGhost)
+        assertEquals("WATER_STATIC_LOCK", decision.dominantFactor)
+    }
+
+    @Test
+    fun testUserActiveLearningHardNegativeMining() {
+        val master = com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier()
+
+        // Tricky edge-case touch that slightly mimics finger (e.g. 70ms dwell, 0.028 size, 0.010 accel)
+        val trickyWaterGlitch = com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector(
+            dwell = 70f,
+            size = 0.028f,
+            pressure = 0.05f,
+            accelDelta = 0.010f,
+            pressureGradient = 0.001f,
+            microTremorVariance = 0.20f,
+            eccentricity = 1.8f,
+            velocity = 0.02f,
+            interval = 250f,
+            timeSinceStimulus = 600f
+        )
+
+        // User acts as "half-brain" and corrects the AI: "This is GHOST!"
+        master.supervise(trickyWaterGlitch, actuallyGhost = true)
+
+        assertEquals(1, master.getSupervisoryCount())
+        assertEquals(1L, master.totalUserCorrections)
+
+        // Now, subsequent occurrence of this water glitch must be immediately blocked with 96% confidence
+        val newDecision = master.classify(trickyWaterGlitch)
+        assertTrue("Supervised water signature must be permanently recognized as GHOST", newDecision.isGhost)
+        assertTrue("Confidence must exceed 90%", newDecision.confidence >= 0.90f)
+        assertEquals("SUPERVISORY_MEMORY", newDecision.dominantFactor)
+    }
+
+    @Test
+    fun testMasterClassifierSPen100PercentCapacitiveMute() {
+        val master = com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier(isSPenModeActive = true)
+
+        // 1. S Pen Stylus passes cleanly
+        val stylusVector = com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector(
+            dwell = 100f, size = 0.05f, pressure = 0.5f, accelDelta = 0.01f, pressureGradient = 0.01f,
+            microTremorVariance = 0.5f, eccentricity = 1.1f, velocity = 0.1f, interval = 100f, timeSinceStimulus = 50f
+        )
+        val stylusDecision = master.classify(stylusVector, toolType = MotionEvent.TOOL_TYPE_STYLUS)
+        assertTrue("Stylus must never be blocked", !stylusDecision.isGhost)
+        assertEquals(0.0f, stylusDecision.ghostProbability, 0.001f)
+
+        // 2. Capacitive finger touch is 100% MUTED
+        val fingerVector = com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector(
+            dwell = 100f, size = 0.05f, pressure = 0.5f, accelDelta = 0.035f, pressureGradient = 0.01f,
+            microTremorVariance = 1.2f, eccentricity = 1.1f, velocity = 0.1f, interval = 100f, timeSinceStimulus = 50f
+        )
+        val fingerDecision = master.classify(fingerVector, toolType = MotionEvent.TOOL_TYPE_FINGER)
+        assertTrue("Capacitive touch must be 100% MUTED in S Pen mode", fingerDecision.isGhost)
+        assertEquals(1.0f, fingerDecision.ghostProbability, 0.001f)
+    }
 }

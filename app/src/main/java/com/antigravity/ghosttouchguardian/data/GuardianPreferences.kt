@@ -70,6 +70,11 @@ class GuardianPreferences(context: Context) {
         get() = prefs.getString(KEY_GHOST_GLITCH_PROFILE, "") ?: ""
         set(value) = prefs.edit().putString(KEY_GHOST_GLITCH_PROFILE, value).apply()
 
+    // v3.0 8D Probabilistic Bayesian AI Brain Engine
+    var ghostBrainEngineJson: String
+        get() = prefs.getString(KEY_GHOST_BRAIN_ENGINE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GHOST_BRAIN_ENGINE, value).apply()
+
     var isSPenModeActive: Boolean
         get() = prefs.getBoolean(KEY_SPEN_MODE_ACTIVE, false)
         set(value) = prefs.edit().putBoolean(KEY_SPEN_MODE_ACTIVE, value).apply()
@@ -93,6 +98,7 @@ class GuardianPreferences(context: Context) {
         private const val KEY_FINGERPRINT_ENABLED = "pref_fingerprint_enabled"
         private const val KEY_HUMAN_FINGER_PROFILE = "pref_human_finger_profile"
         private const val KEY_GHOST_GLITCH_PROFILE = "pref_ghost_glitch_profile"
+        private const val KEY_GHOST_BRAIN_ENGINE = "pref_ghost_brain_engine"
         private const val KEY_SPEN_MODE_ACTIVE = "pref_spen_mode_active"
         private const val KEY_FINGER_SHIELD_MODE = "pref_finger_shield_mode"
     }

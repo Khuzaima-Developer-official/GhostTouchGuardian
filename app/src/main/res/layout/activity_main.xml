@@ -259,6 +259,20 @@
                     android:textSize="13sp"
                     android:lineSpacingExtra="2dp" />
 
+                <!-- S23 Ultra AI Co-Pilot Hero Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLaunchCoPilot"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="12dp"
+                    android:text="🧠 AI CO-PILOT: TEACH AI BRAIN (S23 ULTRA)"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#2563EB"
+                    android:textColor="#FFFFFF"
+                    app:cornerRadius="12dp" />
+
                 <!-- AI Model Calibration Badges -->
                 <LinearLayout
                     android:id="@+id/panelAiStatus"

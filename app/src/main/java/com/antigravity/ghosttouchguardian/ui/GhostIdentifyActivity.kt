@@ -16,10 +16,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.antigravity.ghosttouchguardian.data.GuardianPreferences
 import com.antigravity.ghosttouchguardian.databinding.ActivityGhostIdentifyBinding
+import com.antigravity.ghosttouchguardian.engine.ai.GaussianCluster
+import com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine
 import com.antigravity.ghosttouchguardian.model.GhostGlitchProfile
 import com.antigravity.ghosttouchguardian.model.GhostTouchEntry
 import com.antigravity.ghosttouchguardian.model.GreenSafeZone
 import com.antigravity.ghosttouchguardian.model.HumanFingerProfile
+import com.antigravity.ghosttouchguardian.model.TouchFeatureVector
 import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
 import kotlin.math.sqrt
 
@@ -43,10 +46,13 @@ class GhostIdentifyActivity : AppCompatActivity() {
 
     // Phase 1: Finger calibration state
     private val fingerSamples = mutableListOf<Pair<Float, Float>>() // Pair(size, pressure)
+    private val fingerVectors = mutableListOf<TouchFeatureVector>()
     private var humanProfile = HumanFingerProfile.defaultProfile()
+    private var brainEngine = GhostBrainEngine()
 
     // Phase 2: Ghost scan state
     private val recordedGhostEntries = mutableListOf<GhostTouchEntry>()
+    private val recordedGhostVectors = mutableListOf<TouchFeatureVector>()
     private var scanDurationMs: Long = 30_000L
     private var countDownTimer: CountDownTimer? = null
     private var isGhostScanActive = false
@@ -120,10 +126,23 @@ class GhostIdentifyActivity : AppCompatActivity() {
         val pressure = event.pressure.coerceAtLeast(0.05f)
         fingerSamples.add(Pair(size, pressure))
 
+        val accel = impulseSensor?.getLastAccelDelta() ?: 0.025f
+        val dwellMs = if (downTime > 0L) (event.eventTime - downTime).toInt().coerceIn(30, 300) else 100
+        val vector = TouchFeatureVector.extract(
+            event = event,
+            dwellMs = dwellMs,
+            downX = event.x,
+            downY = event.y,
+            accelDelta = maxOf(accel, 0.020f),
+            intervalMs = 350L,
+            timeSinceStimulusMs = 2000L
+        )
+        fingerVectors.add(vector)
+        brainEngine.learnOnline(vector, isGhost = false)
+
         val count = fingerSamples.size
         binding.tvFingerTapCount.text = "$count / 5"
 
-        val accel = impulseSensor?.getLastAccelDelta() ?: 0.02f
         binding.tvFingerBioFeedback.text = "Tap #$count Registered: Mass=${String.format("%.3f", accel)} m/s², Flesh=${String.format("%.3f", size)}"
 
         // Visual tap feedback animation
@@ -302,10 +321,25 @@ class GhostIdentifyActivity : AppCompatActivity() {
                 recordedGhostEntries.add(entry)
                 lastGhostTimestamp = now
 
+                // Ingest into 8D Bayesian AI Model via online learning
+                val ghostVector = TouchFeatureVector.extract(
+                    event = event,
+                    dwellMs = dwell,
+                    downX = downX,
+                    downY = downY,
+                    accelDelta = accelDelta,
+                    intervalMs = intervalFromPrev,
+                    timeSinceStimulusMs = timeSinceStimulus
+                )
+                recordedGhostVectors.add(ghostVector)
+                brainEngine.learnOnline(ghostVector, isGhost = true)
+
+                val decision = brainEngine.classify(ghostVector)
+
                 runOnUiThread {
-                    binding.tvCapturedSamples.text = "${recordedGhostEntries.size} Glitches Captured"
+                    binding.tvCapturedSamples.text = "${recordedGhostEntries.size} Glitches Profiled into 8D Brain"
                     val echoNote = if (isEcho) " [Post-Stimulus Echo!]" else ""
-                    binding.tvLastFactor.text = "Captured Glitch #${recordedGhostEntries.size} (${dwell}ms)$echoNote"
+                    binding.tvLastFactor.text = "Glitch #${recordedGhostEntries.size} (${dwell}ms)$echoNote | P(Ghost)=${(decision.ghostProbability * 100).toInt()}%"
                     binding.tvLastFactor.setTextColor(Color.parseColor("#FF5252"))
 
                     val minD = recordedGhostEntries.minOfOrNull { it.dwell } ?: dwell
@@ -315,10 +349,11 @@ class GhostIdentifyActivity : AppCompatActivity() {
                     val maxI = intervals.maxOrNull() ?: 450L
 
                     binding.tvFactorMatrix.text = buildString {
-                        append("⏱ Dwell Spectrum:  ${minD}ms – ${maxD}ms (Electrical Noise)\n")
-                        append("🔄 Frequency Band:  ${minI}ms – ${maxI}ms (Stochastic Range)\n")
-                        append("⚡ Zero Momentum:   ${String.format("%.4f", accelDelta)} m/s² (No physical mass)\n")
-                        append("📍 Glitch Position: (${downX.toInt()}, ${downY.toInt()})")
+                        append("🧠 8D Brain Probability: P(Ghost)=${(decision.ghostProbability * 100).toInt()}%\n")
+                        append("⏱ Dwell Spectrum:       ${minD}ms – ${maxD}ms (Noise)\n")
+                        append("🔄 Frequency Band:       ${minI}ms – ${maxI}ms (Stochastic)\n")
+                        append("⚡ Zero Momentum:        ${String.format("%.4f", accelDelta)} m/s² (No physical mass)\n")
+                        append("📐 Ellipse Eccentricity: ${String.format("%.2f", ghostVector.eccentricity)} | Area: ${String.format("%.4f", ghostVector.size)}")
                     }
                 }
             }
@@ -339,24 +374,26 @@ class GhostIdentifyActivity : AppCompatActivity() {
         binding.resultPanel.visibility = View.VISIBLE
 
         binding.tvResultSummary.text = buildString {
-            append("🟢 HUMAN FINGER BASELINE:\n")
+            append("🟢 HUMAN FINGER BASELINE (LOCKED):\n")
             append("   • Min Shockwave Mass:  ${String.format("%.3f", humanProfile.minShockwaveThreshold)} m/s²\n")
             append("   • Min Flesh Contact:    ${String.format("%.3f", humanProfile.minContactSize)}\n")
             append("   • Safe Interaction:     100% Native 120Hz Smooth Pass-Through\n\n")
 
-            append("🔴 GHOST GLITCH RANGE ENVELOPE:\n")
-            append("   • Learned Samples:      ${recordedGhostEntries.size} Glitches Profiled\n")
+            append("🔴 8D GHOST BRAIN & SPECTRUM:\n")
+            append("   • Learned Samples:      ${recordedGhostEntries.size} Glitches Ingested\n")
             append("   • Dwell Spectrum:       ${glitchProfile.minDwell}ms – ${glitchProfile.maxDwell}ms\n")
             append("   • Frequency Band:       ${glitchProfile.minIntervalMs}ms – ${glitchProfile.maxIntervalMs}ms\n")
-            append("   • Full-Screen Shield:   ARMED (All touches in this range swallowed)\n\n")
+            append("   • Online Welford Memory: ACTIVE (Continuous adaptation)\n")
+            append("   • Full-Screen Shield:   ARMED (All unknown frequencies evaluated)\n\n")
 
-            append("🛡️ GhostMind AI Shield ready to activate system-wide.")
+            append("🛡️ GhostMind v3.0 8D Bayesian Shield ready to activate.")
         }
 
         binding.btnSaveFingerprint.setOnClickListener {
-            // Save both profiles
+            // Save profiles and 8D Bayesian Brain Engine
             prefs.humanFingerProfileJson = HumanFingerProfile.toJson(humanProfile)
             prefs.ghostGlitchProfileJson = GhostGlitchProfile.toJson(glitchProfile)
+            prefs.ghostBrainEngineJson = brainEngine.toJson()
             prefs.isFingerShieldModeActive = true
             prefs.isHotspotShieldEnabled = true
 

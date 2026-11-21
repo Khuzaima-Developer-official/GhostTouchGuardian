@@ -29,6 +29,10 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
     var ghostMindCore: com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore =
         com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore()
 
+    /** v3.0 8D Bayesian AI Brain Engine */
+    var ghostBrainEngine: com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine =
+        com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine()
+
     // Telemetry callbacks
     var onAnomalyDetected: ((type: Byte, x: Float, y: Float, dwell: Int, factorReason: String) -> Unit)? = null
     var onHumanIgnoredInGhostMode: ((x: Float, y: Float, dwell: Int) -> Unit)? = null
@@ -242,6 +246,10 @@ class TouchProfilerEngine(val buffer: CompactTouchBuffer = CompactTouchBuffer(12
                     isSPenDischargeEcho && !isHumanConfirmed && dwell <= 70 -> {
                         type = CompactTouchBuffer.TYPE_GHOST_ECHO
                         factorReason = "S Pen Static Echo (${timeSinceStylusMs}ms post-pen)"
+                    }
+                    ghostBrainEngine.isSPenModeActive && toolType != MotionEvent.TOOL_TYPE_STYLUS -> {
+                        type = CompactTouchBuffer.TYPE_GHOST_IDLE
+                        factorReason = "S Pen Mode: 100% Capacitive Muted ($dwell ms)"
                     }
                     isStaticLockDetected && !isHumanConfirmed -> {
                         type = CompactTouchBuffer.TYPE_STATIC_LOCK

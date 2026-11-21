@@ -73,6 +73,14 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:launchMode="singleTop" />
 
+        <!-- S23 Ultra Human-in-the-Loop Co-Pilot Trainer Activity -->
+        <activity
+            android:name=".ui.CoPilotTrainerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GhostTouchGuardian.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:launchMode="singleTop" />
+
         <!-- Active Hotspot Shield Overlay Service -->
         <service
             android:name=".service.HotspotShieldService"

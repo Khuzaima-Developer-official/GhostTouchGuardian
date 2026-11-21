@@ -125,6 +125,25 @@ class MechanicalImpulseSensor(context: Context) : SensorEventListener {
         return false
     }
 
+    /** Returns the peak Newtonian impact magnitude within the coincidence window of a touch event */
+    fun getPeakImpulseInWindow(touchTimeMs: Long, windowMs: Long = 60L): Float {
+        val minTime = touchTimeMs - windowMs
+        val maxTime = touchTimeMs + windowMs
+        var peak = 0f
+
+        synchronized(this) {
+            for (i in 0 until bufferSize) {
+                val t = timestamps[i]
+                if (t in minTime..maxTime) {
+                    if (impulseMagnitudes[i] > peak) {
+                        peak = impulseMagnitudes[i]
+                    }
+                }
+            }
+        }
+        return peak
+    }
+
     companion object {
         // Lowered from 0.045f to 0.016f so soft, natural finger taps are effortlessly detected
         private const val THRESHOLD_IMPULSE = 0.016f
