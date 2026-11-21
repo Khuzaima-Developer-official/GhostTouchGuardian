@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity() {
 
         // Start service
         startGuardianService()
+        ensureShieldServiceRunning()
 
         // Engine link
         engine = TouchGuardianService.instance?.profiler ?: TouchProfilerEngine()
@@ -61,6 +62,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        ensureShieldServiceRunning()
         // Refresh UI
         updateDashboard()
         updateShieldButton()
@@ -68,6 +70,21 @@ class MainActivity : AppCompatActivity() {
         updateBatteryOptimizationButton()
         updateAiStatusBadges()
         renderActiveProfile(prefs.currentProfile)
+    }
+
+    private fun ensureShieldServiceRunning() {
+        if (prefs.isHotspotShieldEnabled || prefs.isSPenModeActive) {
+            val shieldIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                this.action = if (prefs.isSPenModeActive) {
+                    com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_ENABLE_SPEN_MODE
+                } else {
+                    com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+                }
+            }
+            try {
+                ContextCompat.startForegroundService(this, shieldIntent)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun checkAndRequestNotificationPermission() {

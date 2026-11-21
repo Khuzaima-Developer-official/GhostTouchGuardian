@@ -100,8 +100,8 @@ class HotspotShieldService : Service() {
             val timeSinceHuman = now - lastHumanInteractionTime
 
             // Never re-arm while pointer is physically held down or during rapid human typing
-            if (isPointerDownOnScreen || timeSinceHuman < 1200L) {
-                handler.postDelayed(this, 800L)
+            if (isPointerDownOnScreen || timeSinceHuman < 650L) {
+                handler.postDelayed(this, 350L)
             } else {
                 reArmShieldDirect()
             }
@@ -379,24 +379,11 @@ class HotspotShieldService : Service() {
     private fun attachOverlay() {
         if (overlayView != null) return
 
-        // In S Pen mode, the shield MUST cover the full screen unconditionally
-        val isFullScreen = prefs.isSPenModeActive || activeZones.isEmpty()
-
-        var boxLeft = 0
-        var boxTop = 0
-        var boxWidth = WindowManager.LayoutParams.MATCH_PARENT
-        var boxHeight = WindowManager.LayoutParams.MATCH_PARENT
-
-        if (!isFullScreen) {
-            val minX = activeZones.minOf { it.left }.toInt().coerceAtLeast(0)
-            val minY = activeZones.minOf { it.top }.toInt().coerceAtLeast(0)
-            val maxX = activeZones.maxOf { it.right }.toInt()
-            val maxY = activeZones.maxOf { it.bottom }.toInt()
-            boxLeft = max(0, minX - 10)
-            boxTop = max(0, minY - 10)
-            boxWidth = max(100, (maxX - minX) + 20)
-            boxHeight = max(100, (maxY - minY) + 20)
-        }
+        // FULL SCREEN MANDATE: In both Normal Ghost Shield and Dedicated S Pen Mode,
+        // the shield covers 100% of the display to capture random moisture glitches anywhere on screen.
+        val isFullScreen = true
+        val boxWidth = WindowManager.LayoutParams.MATCH_PARENT
+        val boxHeight = WindowManager.LayoutParams.MATCH_PARENT
 
         val view = HotspotOverlayView(this, isFullScreen)
         val params = WindowManager.LayoutParams(
@@ -417,10 +404,6 @@ class HotspotShieldService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            if (!isFullScreen) {
-                x = boxLeft
-                y = boxTop
-            }
         }
 
         try {
@@ -448,14 +431,14 @@ class HotspotShieldService : Service() {
                 } catch (_: Exception) {}
             }
         }
-        // Keep pass-through open while S Pen is active; re-arm 400ms after pen stops
-        handler.postDelayed(penExitRunnable, 400L)
+        // Keep pass-through open while S Pen is active; re-arm 250ms after pen stops
+        handler.postDelayed(penExitRunnable, 250L)
     }
 
     private fun scheduleReArmAfterStylus() {
         handler.removeCallbacks(penExitRunnable)
-        // Fast 250ms snap shut when pen leaves hover range
-        handler.postDelayed(penExitRunnable, 250L)
+        // Fast 150ms snap shut when pen leaves hover range
+        handler.postDelayed(penExitRunnable, 150L)
     }
 
     fun reArmShieldDirect() {
@@ -486,7 +469,7 @@ class HotspotShieldService : Service() {
             }
         }
         handler.removeCallbacks(reArmRunnable)
-        handler.postDelayed(reArmRunnable, 1200L) // Tight 1.2s typing grace period
+        handler.postDelayed(reArmRunnable, 650L) // Fast 650ms typing grace window
     }
 
     private fun removeOverlay() {
@@ -721,12 +704,12 @@ class HotspotShieldService : Service() {
                     isPointerDownOnScreen = true
                     lastHumanInteractionTime = event.eventTime
                     handler.removeCallbacks(reArmRunnable)
-                    handler.postDelayed(reArmRunnable, 1200L)
+                    handler.postDelayed(reArmRunnable, 650L)
                 } else if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
                     isPointerDownOnScreen = false
                     lastHumanInteractionTime = event.eventTime
                     handler.removeCallbacks(reArmRunnable)
-                    handler.postDelayed(reArmRunnable, 1200L)
+                    handler.postDelayed(reArmRunnable, 650L)
                 }
                 return false
             }
@@ -803,7 +786,7 @@ class HotspotShieldService : Service() {
                     movePoints.add(Pair(event.x, event.y))
                     if (isTouchThrough) {
                         handler.removeCallbacks(reArmRunnable)
-                        handler.postDelayed(reArmRunnable, 1200L)
+                        handler.postDelayed(reArmRunnable, 650L)
                         return false
                     }
                     // Check for late mechanical shockwave or fleshy drag expansion
