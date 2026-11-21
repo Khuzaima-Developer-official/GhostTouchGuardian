@@ -28,6 +28,7 @@ class LockScreenShieldActivity : AppCompatActivity() {
     private lateinit var prefs: GuardianPreferences
     private lateinit var repository: CompactTouchRepository
     private lateinit var masterClassifier: MasterTouchClassifier
+    private val aiExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private var downX = 0f
     private var downY = 0f
@@ -70,6 +71,13 @@ class LockScreenShieldActivity : AppCompatActivity() {
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         )
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
+
         // Completely transparent full-screen touch listener
         val transparentView = View(this).apply {
             setBackgroundColor(Color.TRANSPARENT)
@@ -97,9 +105,17 @@ class LockScreenShieldActivity : AppCompatActivity() {
                 return false
             } else {
                 // ANY non-stylus touch on the lock screen is a 100% water glitch!
+                val intervalMs = if (lastTouchTime > 0L) (now - lastTouchTime).coerceAtLeast(1L) else 25L
+                lastTouchTime = now
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    downX = event.x
+                    downY = event.y
+                    downTime = now
                     prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    learnLockScreenGhost(event, 25)
+                    learnLockScreenGhost(event, 25, intervalMs)
+                } else if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    val dwell = (now - downTime).toInt().coerceIn(1, 5000)
+                    learnLockScreenGhost(event, dwell, intervalMs)
                 }
                 return true // Completely swallowed: never touches lock screen PIN/emergency!
             }
@@ -108,13 +124,12 @@ class LockScreenShieldActivity : AppCompatActivity() {
         // -------------------------------------------------------------------------
         // TIER 1: NORMAL MODE RAPID SPAM FILTER (< 45ms)
         // -------------------------------------------------------------------------
-        val interval = if (lastTouchTime > 0L) now - lastTouchTime else Long.MAX_VALUE
+        val interval = if (lastTouchTime > 0L) (now - lastTouchTime).coerceAtLeast(0L) else Long.MAX_VALUE
+        lastTouchTime = now
         if (interval in 0L..44L && toolType != MotionEvent.TOOL_TYPE_STYLUS) {
-            lastTouchTime = now
             prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
             return true // Drop high-frequency chatter immediately!
         }
-        lastTouchTime = now
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -127,7 +142,7 @@ class LockScreenShieldActivity : AppCompatActivity() {
                 val dwell = (now - downTime).toInt()
                 if (dwell < 45 && toolType != MotionEvent.TOOL_TYPE_STYLUS) {
                     prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    learnLockScreenGhost(event, dwell)
+                    learnLockScreenGhost(event, dwell, interval)
                     return true // Swallow instant moisture click
                 }
 
@@ -143,24 +158,42 @@ class LockScreenShieldActivity : AppCompatActivity() {
         return super.onTouchEvent(event)
     }
 
-    private fun learnLockScreenGhost(event: MotionEvent, dwell: Int) {
-        try {
-            val extendedVector = ExtendedTouchVector.extract(
-                event = event,
-                dwellMs = dwell,
-                downX = downX,
-                downY = downY,
-                downPressure = event.pressure,
-                accelDelta = 0.005f,
-                intervalMs = 40L,
-                timeSinceStimulusMs = 100L,
-                movePoints = emptyList()
-            )
-            masterClassifier.learnOnline(extendedVector, isGhost = true)
-            if (masterClassifier.totalOnlineUpdates % 10L == 0L) {
-                repository.saveBrain(masterClassifier)
-            }
-        } catch (_: Exception) {}
+    private fun learnLockScreenGhost(event: MotionEvent, dwell: Int, intervalMs: Long) {
+        val curPressure = event.pressure
+        val curSize = event.size
+        val curMajor = event.touchMajor.coerceAtLeast(1f)
+        val curMinor = event.touchMinor.coerceAtLeast(1f)
+        val curX = event.x
+        val curY = event.y
+        val curDownX = downX
+        val curDownY = downY
+
+        aiExecutor.execute {
+            try {
+                val dx = curX - curDownX
+                val dy = curY - curDownY
+                val dist = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                val velocity = if (dwell > 0) dist / dwell.toFloat() else 0f
+                val eccentricity = (curMajor / curMinor).coerceIn(1.0f, 10.0f)
+
+                val extendedVector = ExtendedTouchVector(
+                    dwell = dwell.toFloat(),
+                    size = curSize.coerceIn(0f, 1f),
+                    pressure = curPressure.coerceIn(0f, 1f),
+                    accelDelta = 0.005f,
+                    pressureGradient = 0f,
+                    microTremorVariance = 0f,
+                    eccentricity = eccentricity,
+                    velocity = velocity.coerceIn(0f, 50f),
+                    interval = intervalMs.toFloat().coerceAtLeast(0f),
+                    timeSinceStimulus = 100f
+                )
+                masterClassifier.learnOnline(extendedVector, isGhost = true)
+                if (masterClassifier.totalOnlineUpdates % 10L == 0L) {
+                    repository.saveBrain(masterClassifier)
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun requestUnlock() {
@@ -183,6 +216,7 @@ class LockScreenShieldActivity : AppCompatActivity() {
         if (instance === this) {
             instance = null
         }
+        try { aiExecutor.shutdown() } catch (_: Exception) {}
         super.onDestroy()
     }
 }
