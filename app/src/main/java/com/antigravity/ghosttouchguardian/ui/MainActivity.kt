@@ -339,6 +339,11 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
+        // AI Co-Pilot Teach & Undo Arena
+        binding.btnLaunchCoPilot.setOnClickListener {
+            startActivity(Intent(this, CoPilotTrainerActivity::class.java))
+        }
+
         setupBatteryOptimizationButton()
     }
 

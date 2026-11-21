@@ -11,8 +11,8 @@ android {
         applicationId = "com.antigravity.ghosttouchguardian"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "3.5.0"
+        versionCode = 21
+        versionName = "3.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

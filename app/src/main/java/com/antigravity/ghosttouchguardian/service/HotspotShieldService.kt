@@ -137,7 +137,18 @@ class HotspotShieldService : Service() {
                         attachOverlay()
                     }
                 }
-                // 3. Screen wake ghost-burst guard
+                // 3. Samsung One UI Keyguard Lock Screen Protection:
+                // Launch transparent Keyguard shield activity if phone is locked
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+                if (km != null && km.isKeyguardLocked) {
+                    val lockIntent = Intent(this@HotspotShieldService, com.antigravity.ghosttouchguardian.ui.LockScreenShieldActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    try {
+                        startActivity(lockIntent)
+                    } catch (_: Exception) {}
+                }
+                // 4. Screen wake ghost-burst guard
                 isScreenWakeGuardActive = true
                 handler.removeCallbacks(screenWakeGuardOff)
                 handler.postDelayed(screenWakeGuardOff, 2000L)
@@ -148,6 +159,11 @@ class HotspotShieldService : Service() {
                 // Screen turned off: Stop impulse sensor to completely eliminate battery & CPU drain
                 impulseSensor.stop()
                 reArmShieldDirect()
+                com.antigravity.ghosttouchguardian.ui.LockScreenShieldActivity.dismissIfRunning()
+            },
+            onUserPresent = {
+                // Phone unlocked by user: dismiss lock screen shield activity
+                com.antigravity.ghosttouchguardian.ui.LockScreenShieldActivity.dismissIfRunning()
             }
         )
 
@@ -447,14 +463,14 @@ class HotspotShieldService : Service() {
                 } catch (_: Exception) {}
             }
         }
-        // Keep pass-through open while S Pen is active; re-arm 250ms after pen stops
-        handler.postDelayed(penExitRunnable, 250L)
+        // Keep pass-through open while S Pen is active; re-arm 180ms after pen stops
+        handler.postDelayed(penExitRunnable, 180L)
     }
 
     private fun scheduleReArmAfterStylus() {
         handler.removeCallbacks(penExitRunnable)
-        // Fast 150ms snap shut when pen leaves hover range
-        handler.postDelayed(penExitRunnable, 150L)
+        // Clean 120ms snap shut when pen leaves hover/touch
+        handler.postDelayed(penExitRunnable, 120L)
     }
 
     fun reArmShieldDirect() {
@@ -619,7 +635,11 @@ class HotspotShieldService : Service() {
                             return false
                         }
                         MotionEvent.ACTION_HOVER_EXIT -> {
-                            scheduleReArmAfterStylus()
+                            // Do NOT re-arm if pen is physically touching down on screen!
+                            // Only re-arm if pen actually left the device hover zone.
+                            if (!isPointerDownOnScreen) {
+                                scheduleReArmAfterStylus()
+                            }
                             return false
                         }
                     }
@@ -633,23 +653,66 @@ class HotspotShieldService : Service() {
             val now = event.eventTime
 
             // =========================================================================
-            // TIER 0: DEDICATED S PEN MODE (100% CAPACITIVE TOUCH MUTING)
+            // TIER 0: DEDICATED S PEN MODE (100% CAPACITIVE TOUCH MUTING & CONTINUOUS GHOST LEARN)
             // =========================================================================
             if (prefs.isSPenModeActive) {
                 if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
                     // Stylus is physically touching down
                     lastStylusHoverTime = android.os.SystemClock.uptimeMillis()
                     lastStylusUpTime = now
+                    handler.removeCallbacks(penExitRunnable)
                     enableStylusPassThrough()
+                    if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                        isPointerDownOnScreen = false
+                        scheduleReArmAfterStylus()
+                    } else {
+                        isPointerDownOnScreen = true
+                    }
                     return false // Let stylus stroke flow through natively
                 } else {
-                    // 100% CAPACITIVE TOUCH MUTING:
-                    // Any finger touch, water droplet, or parasitic capacitive short is
-                    // COMPLETELY CONSUMED HERE. Nothing reaches the underlying app!
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    // USER INSTRUCTION:
+                    // "jab s-pen mode on hoga ussmein main finger click nhin karunga toh
+                    //  tum ghost identify shuru rakhna jo touch hoga usse ghost consider karna
+                    //  taake activities mein bhi detect hota rahe."
+                    // ANY non-stylus touch in S Pen Mode is guaranteed 100% water ghost touch!
+                    isPointerDownOnScreen = false
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_UP) {
                         prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
                         triggerHapticAlert(isGhost = true)
+
+                        // Auto-identify & learn ghost signature in real-time background
+                        val dwell = if (event.actionMasked == MotionEvent.ACTION_UP) (now - pendingDownTime).toInt() else 25
+                        val accelDelta = impulseSensor.getLastAccelDelta()
+                        val featureVector = com.antigravity.ghosttouchguardian.model.TouchFeatureVector.extract(
+                            event = event,
+                            dwellMs = dwell,
+                            downX = pendingDownX,
+                            downY = pendingDownY,
+                            accelDelta = accelDelta,
+                            intervalMs = if (lastTouchTime > 0L) now - lastTouchTime else 50L,
+                            timeSinceStimulusMs = 100L
+                        )
+                        val extendedVector = ExtendedTouchVector.extract(
+                            event = event,
+                            dwellMs = dwell,
+                            downX = pendingDownX,
+                            downY = pendingDownY,
+                            downPressure = event.pressure,
+                            accelDelta = accelDelta,
+                            intervalMs = if (lastTouchTime > 0L) now - lastTouchTime else 50L,
+                            timeSinceStimulusMs = 100L,
+                            movePoints = movePoints
+                        )
+
+                        brainEngine.learnOnline(featureVector, isGhost = true)
+                        masterClassifier.learnOnline(extendedVector, isGhost = true)
+
+                        if (masterClassifier.totalOnlineUpdates % 10L == 0L) {
+                            repository.saveBrain(masterClassifier)
+                            prefs.ghostBrainEngineJson = brainEngine.toJson()
+                        }
                     }
+                    reArmShieldDirect()
                     return true // Swallowed immediately!
                 }
             }

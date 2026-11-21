@@ -193,6 +193,20 @@ class CoPilotTrainerActivity : AppCompatActivity() {
             binding.tvLiveVerdict.setTextColor(Color.parseColor("#EF4444"))
             Toast.makeText(this, "✅ Batch Saved: All $count glitches added to ghost memory!", Toast.LENGTH_LONG).show()
         }
+
+        binding.btnUndoLastAction.setOnClickListener {
+            val undone = masterClassifier.undoLastSupervision()
+            if (undone) {
+                vibrateFeedback(isGhost = false)
+                updateBadges()
+                saveBrainAsync()
+                binding.tvLiveVerdict.text = "↩️ LAST ACTION UNDONE (Decision Boundary Restored)!"
+                binding.tvLiveVerdict.setTextColor(Color.parseColor("#F59E0B"))
+                Toast.makeText(this, "↩️ Reverted last teach action successfully!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "No previous actions to undo!", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun setupModeSelectors() {

@@ -1,0 +1,188 @@
+package com.antigravity.ghosttouchguardian.ui
+
+import android.app.KeyguardManager
+import android.content.Context
+import android.graphics.Color
+import android.os.Build
+import android.os.Bundle
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import androidx.appcompat.app.AppCompatActivity
+import com.antigravity.ghosttouchguardian.data.CompactTouchRepository
+import com.antigravity.ghosttouchguardian.data.GuardianPreferences
+import com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector
+import com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier
+
+/**
+ * LockScreenShieldActivity — Active Lock Screen Guard for Samsung Galaxy S23 Ultra.
+ *
+ * Solves the Samsung One UI Keyguard restriction:
+ * On Samsung devices, WindowManager hides TYPE_APPLICATION_OVERLAY windows when Keyguard is active.
+ * This Activity leverages official Android `setShowWhenLocked(true)` and `setTurnScreenOn(true)`
+ * to sit directly over the lock screen, intercepting all moisture shorts and water chatter
+ * before they can wake or corrupt the lock screen PIN or emergency dialer.
+ */
+class LockScreenShieldActivity : AppCompatActivity() {
+
+    private lateinit var prefs: GuardianPreferences
+    private lateinit var repository: CompactTouchRepository
+    private lateinit var masterClassifier: MasterTouchClassifier
+
+    private var downX = 0f
+    private var downY = 0f
+    private var downTime = 0L
+    private var lastTouchTime = 0L
+
+    companion object {
+        @Volatile
+        var instance: LockScreenShieldActivity? = null
+            private set
+
+        fun dismissIfRunning() {
+            instance?.let {
+                it.finish()
+                instance = null
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        instance = this
+        prefs = GuardianPreferences(this)
+        repository = CompactTouchRepository(this)
+        masterClassifier = repository.loadBrain()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+
+        // Completely transparent full-screen touch listener
+        val transparentView = View(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+        setContentView(transparentView)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val toolType = event.getToolType(0)
+        val now = event.eventTime
+
+        // -------------------------------------------------------------------------
+        // TIER 0: S PEN EXCLUSIVE MODE ON LOCK SCREEN
+        // -------------------------------------------------------------------------
+        if (prefs.isSPenModeActive) {
+            if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
+                // S Pen is allowed to dismiss Keyguard via swipe
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    val distY = kotlin.math.abs(event.y - downY)
+                    val distX = kotlin.math.abs(event.x - downX)
+                    if (distY > 150f || distX > 150f) {
+                        requestUnlock()
+                    }
+                }
+                return false
+            } else {
+                // ANY non-stylus touch on the lock screen is a 100% water glitch!
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                    learnLockScreenGhost(event, 25)
+                }
+                return true // Completely swallowed: never touches lock screen PIN/emergency!
+            }
+        }
+
+        // -------------------------------------------------------------------------
+        // TIER 1: NORMAL MODE RAPID SPAM FILTER (< 45ms)
+        // -------------------------------------------------------------------------
+        val interval = if (lastTouchTime > 0L) now - lastTouchTime else Long.MAX_VALUE
+        if (interval in 0L..44L && toolType != MotionEvent.TOOL_TYPE_STYLUS) {
+            lastTouchTime = now
+            prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+            return true // Drop high-frequency chatter immediately!
+        }
+        lastTouchTime = now
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                downTime = now
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                val dwell = (now - downTime).toInt()
+                if (dwell < 45 && toolType != MotionEvent.TOOL_TYPE_STYLUS) {
+                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                    learnLockScreenGhost(event, dwell)
+                    return true // Swallow instant moisture click
+                }
+
+                // If genuine human swipe across lock screen, request dismiss keyguard
+                val distY = kotlin.math.abs(event.y - downY)
+                val distX = kotlin.math.abs(event.x - downX)
+                if (distY > 160f || distX > 160f) {
+                    requestUnlock()
+                }
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    private fun learnLockScreenGhost(event: MotionEvent, dwell: Int) {
+        try {
+            val extendedVector = ExtendedTouchVector.extract(
+                event = event,
+                dwellMs = dwell,
+                downX = downX,
+                downY = downY,
+                downPressure = event.pressure,
+                accelDelta = 0.005f,
+                intervalMs = 40L,
+                timeSinceStimulusMs = 100L,
+                movePoints = emptyList()
+            )
+            masterClassifier.learnOnline(extendedVector, isGhost = true)
+            if (masterClassifier.totalOnlineUpdates % 10L == 0L) {
+                repository.saveBrain(masterClassifier)
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun requestUnlock() {
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            km?.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+                override fun onDismissSucceeded() {
+                    finish()
+                }
+                override fun onDismissCancelled() {
+                    finish()
+                }
+            })
+        } else {
+            finish()
+        }
+    }
+
+    override fun onDestroy() {
+        if (instance === this) {
+            instance = null
+        }
+        super.onDestroy()
+    }
+}

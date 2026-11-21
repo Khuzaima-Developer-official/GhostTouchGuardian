@@ -187,6 +187,25 @@ class MasterTouchClassifier(
     }
 
     /**
+     * Reverts the most recent user supervision action and recalculates
+     * the decision boundaries from scratch. Prevents permanent corruption
+     * if the user accidentally marked a human finger touch as ghost.
+     */
+    fun undoLastSupervision(): Boolean {
+        if (supervisoryStore.isEmpty()) return false
+        supervisoryStore.removeAt(supervisoryStore.size - 1)
+        if (totalUserCorrections > 0L) totalUserCorrections--
+
+        // Recompute clusters from clean defaults + verified supervisory history
+        humanCluster = MasterCluster.defaultHuman()
+        ghostCluster = MasterCluster.defaultGhost()
+        for (sample in supervisoryStore) {
+            learnOnline(sample.vector, isGhost = sample.isGhost, weight = 3.0f)
+        }
+        return true
+    }
+
+    /**
      * Coordinate-Agnostic Master Classification.
      */
     fun classify(

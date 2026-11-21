@@ -84,6 +84,17 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:launchMode="singleTop" />
 
+        <!-- Dedicated Transparent Full-Screen Lock Screen Shield for Samsung One UI Keyguard -->
+        <activity
+            android:name=".ui.LockScreenShieldActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GhostTouchGuardian.Fullscreen.Transparent"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:inheritShowWhenLocked="true"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true" />
+
         <!-- Active Hotspot Shield Overlay Service (Foreground Service for 24/7 Overlay Protection) -->
         <service
             android:name=".service.HotspotShieldService"

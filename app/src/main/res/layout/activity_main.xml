@@ -294,6 +294,20 @@
                     android:textStyle="bold"
                     app:cornerRadius="12dp"
                     app:strokeColor="#FFB74D" />
+
+                <!-- Interactive AI Teach & Undo Arena Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLaunchCoPilot"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="🧠 AI TEACH &amp; UNDO ARENA (CORRECT MISTAKES)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#2563EB"
+                    app:cornerRadius="12dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
