@@ -55,6 +55,12 @@ class CompactTouchRepository(private val context: Context) {
         saveBrain(brain)
     }
 
+    fun getBrainFileSize(): Long {
+        synchronized(lock) {
+            return if (brainFile.exists()) brainFile.length() else 0L
+        }
+    }
+
     fun resetBrain() {
         synchronized(lock) {
             try {

@@ -308,6 +308,20 @@
                     android:textStyle="bold"
                     app:backgroundTint="#2563EB"
                     app:cornerRadius="12dp" />
+
+                <!-- Finger Dynamic Intensity Profiler Mode Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnFingerMarginProfiler"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="🖐️ MEASURE FINGER MARGIN (CALIBRATE INTENSITY)"
+                    android:textColor="#00E676"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="#00E676" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

@@ -80,15 +80,15 @@ class GhostBrainEngine(
         }
 
         // 4. Human Biometric Invariant Check (Guarantees real fingers are NEVER restricted)
-        // If biological flesh deformation, Newtonian shockwave, or intentional hold is present:
+        // If Newtonian shockwave, verified flesh contact with momentum, or intentional hold with momentum is present:
         val hasPhysicalMomentum = vector.accelDelta >= humanCluster.getMinMomentumThreshold()
-        val hasFleshContact = vector.size >= humanCluster.getMinSizeThreshold() || vector.pressure >= humanCluster.getMinPressureThreshold()
-        val hasHumanDwell = vector.dwell >= 110f
+        val hasHumanHoldWithMomentum = vector.dwell >= 120f && hasPhysicalMomentum
+        val hasVerifiedFlesh = vector.size >= 0.050f && (hasPhysicalMomentum || vector.dwell >= 120f)
 
-        if (hasPhysicalMomentum || hasFleshContact || hasHumanDwell) {
+        if (hasPhysicalMomentum || hasHumanHoldWithMomentum || hasVerifiedFlesh) {
             val factor = when {
                 hasPhysicalMomentum -> "Newtonian Momentum (${String.format("%.3f", vector.accelDelta)} m/s²)"
-                hasFleshContact -> "Flesh Contact (size=${String.format("%.3f", vector.size)})"
+                hasVerifiedFlesh -> "Verified Flesh (size=${String.format("%.3f", vector.size)})"
                 else -> "Human Hold (${vector.dwell.toInt()} ms)"
             }
             return BrainDecision(

@@ -83,6 +83,14 @@ class GuardianPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_FINGER_SHIELD_MODE, true)
         set(value) = prefs.edit().putBoolean(KEY_FINGER_SHIELD_MODE, value).apply()
 
+    var fingerIntensityMarginJson: String
+        get() = prefs.getString(KEY_FINGER_MARGIN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_FINGER_MARGIN, value).apply()
+
+    var ghostTypeClassifierJson: String
+        get() = prefs.getString(KEY_GHOST_TYPE_CLASSIFIER, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GHOST_TYPE_CLASSIFIER, value).apply()
+
     fun resetAllLearnedProfiles() {
         prefs.edit()
             .remove(KEY_HUMAN_FINGER_PROFILE)
@@ -93,6 +101,8 @@ class GuardianPreferences(context: Context) {
             .remove(KEY_SAVED_HOTSPOTS)
             .remove(KEY_CALIBRATED_AVG_PERIOD)
             .remove(KEY_CALIBRATED_VARIANCE)
+            .remove(KEY_FINGER_MARGIN)
+            .remove(KEY_GHOST_TYPE_CLASSIFIER)
             .apply()
     }
 
@@ -114,5 +124,7 @@ class GuardianPreferences(context: Context) {
         private const val KEY_GHOST_BRAIN_ENGINE = "pref_ghost_brain_engine"
         private const val KEY_SPEN_MODE_ACTIVE = "pref_spen_mode_active"
         private const val KEY_FINGER_SHIELD_MODE = "pref_finger_shield_mode"
+        private const val KEY_FINGER_MARGIN = "pref_finger_margin"
+        private const val KEY_GHOST_TYPE_CLASSIFIER = "pref_ghost_type_classifier"
     }
 }

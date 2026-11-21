@@ -1,9 +1,5 @@
 package com.antigravity.ghosttouchguardian.service
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -11,68 +7,77 @@ import android.content.pm.ServiceInfo
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PixelFormat
-import android.graphics.RectF
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import android.provider.Settings
-import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import androidx.core.app.NotificationCompat
-import com.antigravity.ghosttouchguardian.R
 import com.antigravity.ghosttouchguardian.data.CompactTouchRepository
 import com.antigravity.ghosttouchguardian.data.GuardianPreferences
 import com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine
 import com.antigravity.ghosttouchguardian.engine.HotspotZone
+import com.antigravity.ghosttouchguardian.engine.ai.AiStorageOrganizer
 import com.antigravity.ghosttouchguardian.engine.ai.ExtendedTouchVector
 import com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine
+import com.antigravity.ghosttouchguardian.engine.ai.GhostLeakSuppressionEngine
 import com.antigravity.ghosttouchguardian.engine.ai.GhostMindCore
+import com.antigravity.ghosttouchguardian.engine.ai.GhostTypeClassifier
 import com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier
-import com.antigravity.ghosttouchguardian.model.GhostFingerprint
+import com.antigravity.ghosttouchguardian.model.FingerIntensityMargin
 import com.antigravity.ghosttouchguardian.model.GhostGlitchProfile
 import com.antigravity.ghosttouchguardian.model.HumanFingerProfile
 import com.antigravity.ghosttouchguardian.model.TouchFeatureVector
 import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
-import com.antigravity.ghosttouchguardian.ui.MainActivity
+import com.antigravity.ghosttouchguardian.service.shield.GhostHapticFeedback
+import com.antigravity.ghosttouchguardian.service.shield.HumanImpulseGate
+import com.antigravity.ghosttouchguardian.service.shield.OverlayWindowManager
+import com.antigravity.ghosttouchguardian.service.shield.RapidSpamGate
+import com.antigravity.ghosttouchguardian.service.shield.SPenGate
+import com.antigravity.ghosttouchguardian.service.shield.ShieldNotificationManager
 import kotlin.math.max
 
 /**
- * HotspotShieldService (v3.1) — Precision Screen Shield & Pure S Pen EMR Gate
+ * HotspotShieldService (v3.8.0) — Precision Screen Shield & Pure S Pen EMR Gate
  *
- * Implements:
- * 1. Dedicated S Pen Mode: 100% Capacitive Muting. All finger touches, palms, water droplets,
- *    and parasitic capacitive leaks are completely dropped/swallowed at the window level.
- *    Wacom magnetic EMR hover/touch activates seamless native pass-through.
- * 2. Finger Touch Mode: Real human touches pass with zero disruption, while water-damaged
- *    static pools and micro-tremor-free glitches are swallowed.
- * 3. Smart State Machine: Prevents mid-gesture window mutations.
+ * Single-Task Modular Architecture:
+ * - Window Management: OverlayWindowManager (Cutout-safe, 100% full screen)
+ * - Notifications: ShieldNotificationManager (Un-swipeable, instant toggles)
+ * - Stylus Hardware Routing: SPenGate (Pure Wacom EMR detection, 35-45ms re-arm)
+ * - Burst Rejection: RapidSpamGate (<45ms zero-allocation burst filter)
+ * - Physical Biometrics: HumanImpulseGate (Chassis momentum, FingerIntensityMargin)
+ * - Throttled Alerts: GhostHapticFeedback (Max 1 per 250ms)
+ * - AI Leak Choke: GhostLeakSuppressionEngine (Active frequency & spatial hotspot tracking)
+ * - Dynamic Organizer: AiStorageOrganizer (Compaction & contamination purge)
  */
 class HotspotShieldService : Service() {
 
     private lateinit var prefs: GuardianPreferences
-    private lateinit var windowManager: WindowManager
     private lateinit var impulseSensor: MechanicalImpulseSensor
-
-    private var overlayView: HotspotOverlayView? = null
-    private var overlayParams: WindowManager.LayoutParams? = null
-    private var activeZones: List<HotspotZone> = emptyList()
+    private lateinit var repository: CompactTouchRepository
 
     // AI Mind Core & 8D Bayesian Brain & Master Touch Classifier
     private val aiCore = GhostMindCore()
     private var brainEngine: GhostBrainEngine = GhostBrainEngine()
     private var masterClassifier: MasterTouchClassifier = MasterTouchClassifier()
-    private lateinit var repository: CompactTouchRepository
+    private var fingerMargin: FingerIntensityMargin = FingerIntensityMargin()
+    private var activeZones: List<HotspotZone> = emptyList()
+
     private val aiExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val leakSuppressionEngine = GhostLeakSuppressionEngine()
+    private val ghostTypeClassifier = GhostTypeClassifier()
+    private lateinit var storageOrganizer: AiStorageOrganizer
+
+    // Single-Task Modular Components
+    private lateinit var overlayManager: OverlayWindowManager
+    private lateinit var notificationManager: ShieldNotificationManager
+    private lateinit var spenGate: SPenGate
+    private val rapidSpamGate = RapidSpamGate()
+    private val humanImpulseGate = HumanImpulseGate()
+    private lateinit var hapticFeedback: GhostHapticFeedback
 
     private val handler = Handler(Looper.getMainLooper())
-    private var isTouchThrough = false
 
     // Screen wake guard
     @Volatile private var isScreenWakeGuardActive = false
@@ -81,14 +86,6 @@ class HotspotShieldService : Service() {
     // Human interaction tracking
     @Volatile private var lastHumanInteractionTime: Long = 0L
     @Volatile private var isPointerDownOnScreen: Boolean = false
-
-    // S Pen debounce runnable: re-arms the shield 350ms after pen leaves hover/screen
-    private val penExitRunnable = Runnable {
-        if (prefs.isSPenModeActive) {
-            reArmShieldDirect()
-            overlayView?.postInvalidate()
-        }
-    }
 
     // Normal mode re-arm runnable
     private val reArmRunnable: Runnable = object : Runnable {
@@ -115,11 +112,28 @@ class HotspotShieldService : Service() {
         super.onCreate()
         prefs = GuardianPreferences(this)
         repository = CompactTouchRepository(this)
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        storageOrganizer = AiStorageOrganizer(repository, prefs)
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+
+        // Initialize single-task components
+        overlayManager = OverlayWindowManager(this, wm)
+        notificationManager = ShieldNotificationManager(this, prefs)
+        hapticFeedback = GhostHapticFeedback(this)
+        spenGate = SPenGate(
+            onEnablePassThrough = { overlayManager.setTouchThrough(true) },
+            onReArmShield = { overlayManager.setTouchThrough(false) }
+        )
+
+        aiExecutor.execute {
+            try {
+                storageOrganizer.organizeAndCompact(masterClassifier)
+            } catch (_: Exception) {}
+        }
+
         impulseSensor = MechanicalImpulseSensor(this).apply {
             onHumanMotionDetected = {
                 // In S Pen mode, phone motion must NEVER unblock capacitive touch!
-                if (!prefs.isSPenModeActive && !isTouchThrough) {
+                if (!prefs.isSPenModeActive && !overlayManager.isTouchThrough) {
                     passThroughTemporarily()
                 }
             }
@@ -133,13 +147,12 @@ class HotspotShieldService : Service() {
                 // 1. Re-activate sensor
                 impulseSensor.start()
                 // 2. Ensure lock screen / app overlay is active
-                if (checkOverlayPermission()) {
-                    if (overlayView == null) {
+                if (overlayManager.checkOverlayPermission()) {
+                    if (overlayManager.overlayView == null) {
                         attachOverlay()
                     }
                 }
-                // 3. Samsung One UI Keyguard Lock Screen Protection:
-                // Launch transparent Keyguard shield activity if phone is locked
+                // 3. Samsung One UI Keyguard Lock Screen Protection
                 val km = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
                 if (km != null && km.isKeyguardLocked) {
                     val lockIntent = Intent(this@HotspotShieldService, com.antigravity.ghosttouchguardian.ui.LockScreenShieldActivity::class.java).apply {
@@ -154,7 +167,7 @@ class HotspotShieldService : Service() {
                 handler.removeCallbacks(screenWakeGuardOff)
                 handler.postDelayed(screenWakeGuardOff, 2000L)
                 reArmShieldDirect()
-                overlayView?.postInvalidate()
+                overlayManager.overlayView?.postInvalidate()
             },
             onScreenOff = {
                 // Screen turned off: Stop impulse sensor to completely eliminate battery & CPU drain
@@ -181,19 +194,19 @@ class HotspotShieldService : Service() {
         )
 
         reloadProfiles()
-        if (checkOverlayPermission()) {
+        if (overlayManager.checkOverlayPermission()) {
             attachOverlay()
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        createNotificationChannel()
-        val notification = buildNotification()
+        notificationManager.createNotificationChannel()
+        val notification = notificationManager.buildNotification()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                startForeground(ShieldNotificationManager.NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else {
-                startForeground(NOTIFICATION_ID, notification)
+                startForeground(ShieldNotificationManager.NOTIFICATION_ID, notification)
             }
         } catch (_: Exception) {}
         isShieldRunning = true
@@ -201,8 +214,8 @@ class HotspotShieldService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 reloadProfiles()
-                if (checkOverlayPermission()) attachOverlay()
-                updateNotification()
+                if (overlayManager.checkOverlayPermission()) attachOverlay()
+                notificationManager.updateNotification()
             }
             ACTION_STOP -> {
                 prefs.isHotspotShieldEnabled = false
@@ -214,18 +227,18 @@ class HotspotShieldService : Service() {
             }
             ACTION_PAUSE -> {
                 removeOverlay()
-                updateNotification()
+                notificationManager.updateNotification()
             }
             ACTION_RESUME -> {
                 reloadProfiles()
-                if (checkOverlayPermission()) attachOverlay()
-                updateNotification()
+                if (overlayManager.checkOverlayPermission()) attachOverlay()
+                notificationManager.updateNotification()
             }
             ACTION_REFRESH_ZONES -> {
                 reloadProfiles()
                 removeOverlay()
-                if (checkOverlayPermission()) attachOverlay()
-                updateNotification()
+                if (overlayManager.checkOverlayPermission()) attachOverlay()
+                notificationManager.updateNotification()
             }
             ACTION_SCREEN_WAKE_GUARD -> {
                 isScreenWakeGuardActive = true
@@ -243,19 +256,14 @@ class HotspotShieldService : Service() {
                 brainEngine.isSPenModeActive = true
                 masterClassifier.isSPenModeActive = true
 
-                if (checkOverlayPermission()) {
-                    if (overlayView == null) {
-                        attachOverlay()
-                    } else if (!overlayView!!.isFullScreen) {
-                        // S Pen Mode demands 100% full-screen coverage
-                        removeOverlay()
+                if (overlayManager.checkOverlayPermission()) {
+                    if (overlayManager.overlayView == null) {
                         attachOverlay()
                     }
-                    // Immediately lock down all capacitive touch!
                     reArmShieldDirect()
-                    overlayView?.postInvalidate()
+                    overlayManager.overlayView?.postInvalidate()
                 }
-                updateNotification()
+                notificationManager.updateNotification()
             }
             ACTION_DISABLE_SPEN_MODE -> {
                 prefs.isSPenModeActive = false
@@ -263,11 +271,11 @@ class HotspotShieldService : Service() {
                 brainEngine.isSPenModeActive = false
                 masterClassifier.isSPenModeActive = false
                 removeOverlay()
-                if (prefs.isHotspotShieldEnabled && checkOverlayPermission()) {
+                if (prefs.isHotspotShieldEnabled && overlayManager.checkOverlayPermission()) {
                     reloadProfiles()
                     attachOverlay()
                 }
-                updateNotification()
+                notificationManager.updateNotification()
             }
             ACTION_TOGGLE_SPEN_MODE -> {
                 prefs.isSPenModeActive = !prefs.isSPenModeActive
@@ -277,128 +285,42 @@ class HotspotShieldService : Service() {
 
                 if (prefs.isSPenModeActive) {
                     prefs.isHotspotShieldEnabled = true
-                    if (checkOverlayPermission()) {
+                    if (overlayManager.checkOverlayPermission()) {
                         removeOverlay()
                         attachOverlay()
                         reArmShieldDirect()
                     }
                 } else {
                     removeOverlay()
-                    if (prefs.isHotspotShieldEnabled && checkOverlayPermission()) {
+                    if (prefs.isHotspotShieldEnabled && overlayManager.checkOverlayPermission()) {
                         reloadProfiles()
                         attachOverlay()
                     }
                 }
-                updateNotification()
-                overlayView?.postInvalidate()
+                notificationManager.updateNotification()
+                overlayManager.overlayView?.postInvalidate()
             }
             ACTION_RESET_DATA -> {
                 prefs.resetAllLearnedProfiles()
                 repository.resetBrain()
-                aiCore.humanProfile = com.antigravity.ghosttouchguardian.model.HumanFingerProfile()
-                aiCore.ghostProfile = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile()
-                brainEngine = com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine()
-                masterClassifier = com.antigravity.ghosttouchguardian.engine.ai.MasterTouchClassifier()
+                aiCore.humanProfile = HumanFingerProfile()
+                aiCore.ghostProfile = GhostGlitchProfile()
+                fingerMargin = FingerIntensityMargin()
+                ghostTypeClassifier.loadFromJson("")
+                brainEngine = GhostBrainEngine()
+                masterClassifier = MasterTouchClassifier()
+                leakSuppressionEngine.releaseStorm()
                 reloadProfiles()
-                updateNotification()
+                notificationManager.updateNotification()
             }
         }
         return START_STICKY
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Ghost Touch Active Shield",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "24/7 Persistent Touch Interception & S Pen Gate"
-                setShowBadge(false)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun buildNotification(): Notification {
-        val launchIntent = Intent(this, MainActivity::class.java)
-        val pendingLaunch = PendingIntent.getActivity(
-            this, 0, launchIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        // Stop action: Turns shield off, removes overlay and dismisses notification
-        val stopIntent = Intent(this, HotspotShieldService::class.java).apply {
-            action = ACTION_STOP
-        }
-        val pendingStop = PendingIntent.getService(
-            this, 10, stopIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val title: String
-        val text: String
-        val spenButtonText: String
-        val spenPendingIntent: PendingIntent
-
-        if (prefs.isSPenModeActive) {
-            val blocked = prefs.totalBlockedGhosts
-            title = "🖊️ S Pen Exclusive: ON"
-            text = "$blocked Glitches Muted • Only S Pen Active"
-            val disableSPenIntent = Intent(this, HotspotShieldService::class.java).apply {
-                action = ACTION_DISABLE_SPEN_MODE
-            }
-            spenButtonText = "🖐️ Switch to Finger Mode"
-            spenPendingIntent = PendingIntent.getService(
-                this, 11, disableSPenIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-        } else {
-            val blocked = prefs.totalBlockedGhosts
-            title = "🛡️ Ghost Touch Shield: ON"
-            text = "45ms Spam Filter Active • $blocked Glitches Swallowed"
-            val enableSPenIntent = Intent(this, HotspotShieldService::class.java).apply {
-                action = ACTION_ENABLE_SPEN_MODE
-            }
-            spenButtonText = "🖊️ Switch to S-Pen Only"
-            spenPendingIntent = PendingIntent.getService(
-                this, 12, enableSPenIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-        }
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(R.drawable.ic_shield)
-            .setOngoing(true) // Un-swipeable! NEVER DISAPPEARS UNTIL TURNED OFF
-            .setAutoCancel(false)
-            .setContentIntent(pendingLaunch)
-            .addAction(R.drawable.ic_shield, spenButtonText, spenPendingIntent)
-            .addAction(R.drawable.ic_shield, "🛑 Turn Off Shield", pendingStop)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .build()
-    }
-
-    private fun updateNotification() {
-        try {
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            manager?.notify(NOTIFICATION_ID, buildNotification())
-        } catch (_: Exception) {}
-    }
-
-    private fun checkOverlayPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(this)
-        } else true
-    }
-
     private fun reloadProfiles() {
         activeZones = GhostCalibrationEngine.parseZonesFromJson(prefs.savedHotspotsJson)
+        fingerMargin = FingerIntensityMargin.fromJson(prefs.fingerIntensityMarginJson)
+        ghostTypeClassifier.loadFromJson(prefs.ghostTypeClassifierJson)
         aiCore.humanProfile = HumanFingerProfile.fromJson(prefs.humanFingerProfileJson)
         aiCore.ghostProfile = GhostGlitchProfile.fromJson(prefs.ghostGlitchProfileJson)
         aiCore.isSPenModeActive = prefs.isSPenModeActive
@@ -411,144 +333,37 @@ class HotspotShieldService : Service() {
     }
 
     private fun attachOverlay() {
-        if (overlayView != null) return
+        if (overlayManager.overlayView != null) return
 
-        // FULL SCREEN MANDATE: In both Normal Ghost Shield and Dedicated S Pen Mode,
-        // the shield covers 100% of the display to capture random moisture glitches anywhere on screen.
-        val isFullScreen = true
-        val boxWidth = WindowManager.LayoutParams.MATCH_PARENT
-        val boxHeight = WindowManager.LayoutParams.MATCH_PARENT
+        val view = HotspotOverlayView(this)
+        overlayManager.attachOverlay(view)
 
-        val view = HotspotOverlayView(this, isFullScreen)
-        val params = WindowManager.LayoutParams(
-            boxWidth,
-            boxHeight,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
-            },
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-            }
+        if (prefs.isSPenModeActive) {
+            overlayManager.setTouchThrough(false)
+        } else {
+            passThroughTemporarily()
         }
-
-        try {
-            windowManager.addView(view, params)
-            overlayView = view
-            overlayParams = params
-
-            if (prefs.isSPenModeActive) {
-                // In S Pen Mode: Start FULLY ARMED from millisecond 0!
-                isTouchThrough = false
-            } else {
-                passThroughTemporarily()
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun enableStylusPassThrough() {
-        handler.removeCallbacks(penExitRunnable)
-        if (!isTouchThrough) {
-            isTouchThrough = true
-            overlayParams?.let { p ->
-                p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                try {
-                    overlayView?.let { windowManager.updateViewLayout(it, p) }
-                } catch (_: Exception) {}
-            }
-        }
-        // Keep pass-through open while S Pen is active; re-arm 45ms after pen stops
-        handler.postDelayed(penExitRunnable, 45L)
-    }
-
-    private fun scheduleReArmAfterStylus() {
-        handler.removeCallbacks(penExitRunnable)
-        // Clean 35ms snap shut when pen leaves hover/touch
-        handler.postDelayed(penExitRunnable, 35L)
     }
 
     fun reArmShieldDirect() {
-        handler.removeCallbacks(penExitRunnable)
+        spenGate.cancelPendingReArm()
         handler.removeCallbacks(reArmRunnable)
-        if (isTouchThrough) {
-            isTouchThrough = false
-            overlayParams?.let { p ->
-                p.flags = p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                try {
-                    overlayView?.let { windowManager.updateViewLayout(it, p) }
-                } catch (_: Exception) {}
-            }
-        }
+        overlayManager.setTouchThrough(false)
     }
 
     private fun passThroughTemporarily() {
         if (prefs.isSPenModeActive) return
 
         lastHumanInteractionTime = android.os.SystemClock.uptimeMillis()
-        if (!isTouchThrough) {
-            isTouchThrough = true
-            overlayParams?.let { p ->
-                p.flags = p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                try {
-                    overlayView?.let { windowManager.updateViewLayout(it, p) }
-                } catch (_: Exception) {}
-            }
-        }
+        overlayManager.setTouchThrough(true)
         handler.removeCallbacks(reArmRunnable)
         handler.postDelayed(reArmRunnable, 350L) // Fast 350ms typing grace window
     }
 
     private fun removeOverlay() {
-        handler.removeCallbacks(penExitRunnable)
+        spenGate.cancelPendingReArm()
         handler.removeCallbacks(reArmRunnable)
-        overlayView?.let {
-            try { windowManager.removeView(it) } catch (_: Exception) {}
-        }
-        overlayView = null
-        overlayParams = null
-        isTouchThrough = false
-    }
-
-    private var lastHapticTime: Long = 0L
-
-    private fun triggerHapticAlert(isGhost: Boolean) {
-        val now = android.os.SystemClock.uptimeMillis()
-        if (now - lastHapticTime < 250L) return // Throttled: prevents UI thread IPC stalls during rapid bursts
-        lastHapticTime = now
-        try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val effect = if (isGhost) {
-                    VibrationEffect.createOneShot(35L, VibrationEffect.DEFAULT_AMPLITUDE)
-                } else {
-                    VibrationEffect.createOneShot(15L, VibrationEffect.DEFAULT_AMPLITUDE)
-                }
-                vibrator?.vibrate(effect)
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(if (isGhost) 35L else 15L)
-            }
-        } catch (_: Exception) {}
+        overlayManager.removeOverlay()
     }
 
     override fun onDestroy() {
@@ -575,9 +390,9 @@ class HotspotShieldService : Service() {
                 androidx.core.content.ContextCompat.startForegroundService(applicationContext, restartIntent)
             } catch (_: Exception) {}
 
-            val restartPendingIntent = PendingIntent.getService(
+            val restartPendingIntent = android.app.PendingIntent.getService(
                 applicationContext, 1001, restartIntent,
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
             alarmManager?.set(
@@ -593,28 +408,7 @@ class HotspotShieldService : Service() {
     // ---------------------------------------------------------------------------
     // Overlay View with GhostMind AI Classifier & S Pen Pure EMR Gate
     // ---------------------------------------------------------------------------
-    private inner class HotspotOverlayView(context: Context, val isFullScreen: Boolean) : View(context) {
-
-        private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(if (isFullScreen) 0 else 25, 255, 23, 68)
-            style = Paint.Style.FILL
-        }
-
-        // HUD Paints for S Pen Mode visual feedback
-        private val hudBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
-        }
-        private val hudBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 3f
-        }
-        private val hudTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 28f
-            isFakeBoldText = true
-        }
-        private val hudSubTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 20f
-        }
+    private inner class HotspotOverlayView(context: Context) : View(context) {
 
         private var pendingDownTime: Long = 0L
         private var pendingDownX: Float = 0f
@@ -623,11 +417,6 @@ class HotspotShieldService : Service() {
         private val movePoints = mutableListOf<Pair<Float, Float>>()
         private var lastStylusUpTime: Long = 0L
         private var lastHumanUpTime: Long = 0L
-        private var lastTouchTime: Long = 0L
-
-        // Visual telemetry state
-        private var lastBlockedTime: Long = 0L
-        private var lastStylusHoverTime: Long = 0L
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
@@ -637,27 +426,8 @@ class HotspotShieldService : Service() {
 
         override fun onHoverEvent(event: MotionEvent): Boolean {
             if (prefs.isSPenModeActive) {
-                val toolType = event.getToolType(0)
-                if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
-                    lastStylusHoverTime = android.os.SystemClock.uptimeMillis()
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_HOVER_ENTER,
-                        MotionEvent.ACTION_HOVER_MOVE -> {
-                            // S Pen is hovering near glass! Temporarily set FLAG_NOT_TOUCHABLE
-                            // so when pen tip touches down, touch goes directly to underlying app
-                            enableStylusPassThrough()
-                            return false
-                        }
-                        MotionEvent.ACTION_HOVER_EXIT -> {
-                            // Do NOT re-arm if pen is physically touching down on screen!
-                            // Only re-arm if pen actually left the device hover zone.
-                            if (!isPointerDownOnScreen) {
-                                scheduleReArmAfterStylus()
-                            }
-                            return false
-                        }
-                    }
-                }
+                spenGate.handleHover(event, isPointerDownOnScreen)
+                return false
             }
             return super.onHoverEvent(event)
         }
@@ -665,15 +435,7 @@ class HotspotShieldService : Service() {
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val now = event.eventTime
             val toolType = event.getToolType(0)
-
-            val pointerCount = event.pointerCount
-            var hasOnlyStylus = true
-            for (i in 0 until pointerCount) {
-                if (event.getToolType(i) != MotionEvent.TOOL_TYPE_STYLUS) {
-                    hasOnlyStylus = false
-                    break
-                }
-            }
+            val hasOnlyStylus = spenGate.hasOnlyStylus(event)
 
             // =========================================================================
             // TIER 0: DEDICATED S PEN MODE (100% CAPACITIVE TOUCH MUTING & CONTINUOUS GHOST LEARN)
@@ -681,27 +443,20 @@ class HotspotShieldService : Service() {
             if (prefs.isSPenModeActive) {
                 if (hasOnlyStylus) {
                     // Stylus is physically touching down
-                    lastStylusHoverTime = android.os.SystemClock.uptimeMillis()
                     lastStylusUpTime = now
-                    handler.removeCallbacks(penExitRunnable)
-                    enableStylusPassThrough()
+                    spenGate.onStylusTouchDown()
                     if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
                         isPointerDownOnScreen = false
-                        scheduleReArmAfterStylus()
+                        spenGate.onStylusTouchUp()
                     } else {
                         isPointerDownOnScreen = true
                     }
                     return false // Let stylus stroke flow through natively
                 } else {
-                    // USER INSTRUCTION:
-                    // "jab s-pen mode on hoga ussmein main finger click nhin karunga toh
-                    //  tum ghost identify shuru rakhna jo touch hoga usse ghost consider karna
-                    //  taake activities mein bhi detect hota rahe."
                     // ANY non-stylus touch in S Pen Mode is guaranteed 100% water ghost touch!
                     isPointerDownOnScreen = false
 
-                    val intervalMs = if (lastTouchTime > 0L) (now - lastTouchTime).coerceAtLeast(1L) else 20L
-                    lastTouchTime = now
+                    val intervalMs = rapidSpamGate.getLastInterval(now)
 
                     when (event.actionMasked) {
                         MotionEvent.ACTION_DOWN -> {
@@ -719,7 +474,7 @@ class HotspotShieldService : Service() {
 
                     if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_UP) {
                         prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        triggerHapticAlert(isGhost = true)
+                        hapticFeedback.triggerAlert(isGhost = true)
 
                         val dwell = if (event.actionMasked == MotionEvent.ACTION_UP && pendingDownTime > 0L) {
                             (now - pendingDownTime).toInt().coerceIn(1, 5000)
@@ -760,7 +515,7 @@ class HotspotShieldService : Service() {
                                     tremorVar = (sqDiffSum / pointsCopy.size.toFloat()).coerceIn(0f, 25f)
                                 }
 
-                                val featureVector = com.antigravity.ghosttouchguardian.model.TouchFeatureVector(
+                                val featureVector = TouchFeatureVector(
                                     dwell = dwell.toFloat(),
                                     size = curSize.coerceIn(0f, 1f),
                                     pressure = curPressure.coerceIn(0f, 1f),
@@ -783,12 +538,15 @@ class HotspotShieldService : Service() {
                                     timeSinceStimulus = 100f
                                 )
 
+                                leakSuppressionEngine.registerGhostTouch(curX, curY, intervalMs, width, height)
+                                ghostTypeClassifier.learnGhostType(accelDelta, tremorVar, intervalMs)
                                 brainEngine.learnOnline(featureVector, isGhost = true)
                                 masterClassifier.learnOnline(extendedVector, isGhost = true)
 
-                                if (masterClassifier.totalOnlineUpdates % 10L == 0L) {
-                                    repository.saveBrain(masterClassifier)
+                                if (masterClassifier.totalOnlineUpdates % 25L == 0L) {
+                                    storageOrganizer.organizeAndCompact(masterClassifier)
                                     prefs.ghostBrainEngineJson = brainEngine.toJson()
+                                    prefs.ghostTypeClassifierJson = ghostTypeClassifier.toJson()
                                 }
                             } catch (_: Exception) {}
                         }
@@ -801,40 +559,59 @@ class HotspotShieldService : Service() {
             // =========================================================================
             // TIER 1: ULTRA-FAST RAPID SPAM FILTER (< 45ms INTERVAL OR MULTI-BURST)
             // =========================================================================
-            // High-frequency water droplet capacitive resonance causes bursts of phantom
-            // touches within 0-44ms (even 10 touches in 1ms!).
-            // Conscious human tapping physical limit is > 70ms (absolute minimum ~55-60ms).
-            // Any non-stylus touch occurring within < 45ms of the previous touch is pure electrical spam.
-            // Swallow IMMEDIATELY with ZERO object allocations or vector extractions!
-            val interval = if (lastTouchTime > 0L) (now - lastTouchTime).coerceAtLeast(0L) else Long.MAX_VALUE
-            lastTouchTime = now
-
-            if (interval in 0L..44L && !hasOnlyStylus) {
+            if (rapidSpamGate.isSpamBurst(event, hasOnlyStylus)) {
                 if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_UP) {
                     prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    triggerHapticAlert(isGhost = true)
+                    hapticFeedback.triggerAlert(isGhost = true)
                 }
-                if (isTouchThrough) {
+                if (overlayManager.isTouchThrough) {
                     reArmShieldDirect()
                 }
                 return true // SWALLOW BURST INSTANTLY!
             }
-            lastTouchTime = now
+
+            val interval = rapidSpamGate.getLastInterval(now)
 
             // =========================================================================
             // TIER 2: NORMAL FINGER TOUCH & AI GHOST SHIELD MODE
             // =========================================================================
-            if (isTouchThrough) {
+            if (overlayManager.isTouchThrough) {
+                val accelDelta = impulseSensor.getLastAccelDelta()
+                val hasImpulse = impulseSensor.hasMechanicalImpulse(now, windowMs = 80L)
+
+                // ACTIVE AI MIND: REAL-TIME GHOST TYPE & LEAK CHOKE
+                val isGhostType = ghostTypeClassifier.isGhostType(
+                    dwellMs = 50,
+                    size = event.size,
+                    pressure = event.pressure,
+                    accelDelta = accelDelta,
+                    hasImpulse = hasImpulse,
+                    microTremorVar = 0f,
+                    intervalMs = interval,
+                    isStylus = hasOnlyStylus,
+                    inGreenZone = false,
+                    fingerMargin = fingerMargin
+                )
+                val isLeak = isGhostType || leakSuppressionEngine.evaluateLeak(event, now, interval, accelDelta, hasImpulse, width, height)
+                if (isLeak) {
+                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                    hapticFeedback.triggerAlert(isGhost = true)
+                    reArmShieldDirect()
+                    ghostTypeClassifier.learnGhostType(accelDelta, 0f, interval)
+                    leakSuppressionEngine.registerGhostTouch(event.x, event.y, interval, width, height)
+                    return true // CHOKE LEAK IMMEDIATELY!
+                }
+
                 if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_MOVE) {
                     isPointerDownOnScreen = true
                     lastHumanInteractionTime = now
                     handler.removeCallbacks(reArmRunnable)
-                    handler.postDelayed(reArmRunnable, 650L)
+                    handler.postDelayed(reArmRunnable, 350L)
                 } else if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
                     isPointerDownOnScreen = false
                     lastHumanInteractionTime = now
                     handler.removeCallbacks(reArmRunnable)
-                    handler.postDelayed(reArmRunnable, 650L)
+                    handler.postDelayed(reArmRunnable, 350L)
                 }
                 return false
             }
@@ -866,6 +643,23 @@ class HotspotShieldService : Service() {
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    // ACTIVE STORM SUPPRESSION: Clamped down during high-frequency glitch storms
+                    if (leakSuppressionEngine.isStormSuppressionActive) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        return true
+                    }
+
+                    val accelDelta = impulseSensor.getLastAccelDelta()
+                    val hasImpulse = impulseSensor.hasMechanicalImpulse(now, windowMs = 80L)
+
+                    val inMoistureHotspot = leakSuppressionEngine.isInMoistureHotspot(event.x, event.y, width, height)
+                    if (inMoistureHotspot && !hasImpulse) {
+                        // High-density moisture zone without physical chassis impulse: swallow immediately!
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        hapticFeedback.triggerAlert(isGhost = true)
+                        return true
+                    }
+
                     isPointerDownOnScreen = true
                     lastHumanInteractionTime = event.eventTime
                     pendingDownTime = event.eventTime
@@ -874,19 +668,38 @@ class HotspotShieldService : Service() {
                     pendingDownPressure = event.pressure
                     movePoints.clear()
                     movePoints.add(Pair(event.x, event.y))
-                    val accelDelta = impulseSensor.getLastAccelDelta()
-                    val hasImpulse = impulseSensor.hasMechanicalImpulse(now, windowMs = 80L)
                     val effectiveAccel = if (hasImpulse) max(accelDelta, 0.025f) else accelDelta
 
                     val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
 
-                    // Evaluates physical human evidence:
-                    // 1. Accelerometer shockwave (phone chassis impulse from physical finger strike)
-                    // 2. Safe green zone from user calibration
-                    // 3. Learned human profile match with chassis acceleration
-                    // (NOTE: High pressure or size ALONE is rejected because water droplets are highly conductive)
-                    val isHumanTap = hasImpulse || inGreenZone ||
-                            (aiCore.humanProfile.isValid && aiCore.humanProfile.matchesHuman(0, event.size, event.pressure, effectiveAccel))
+                    // BROAD GHOST TYPE FILTER: Categorically rejects water/electrical chatter
+                    val isGhostType = ghostTypeClassifier.isGhostType(
+                        dwellMs = 50,
+                        size = event.size,
+                        pressure = event.pressure,
+                        accelDelta = effectiveAccel,
+                        hasImpulse = hasImpulse,
+                        microTremorVar = 0f,
+                        intervalMs = interval,
+                        isStylus = hasOnlyStylus,
+                        inGreenZone = inGreenZone,
+                        fingerMargin = fingerMargin
+                    )
+
+                    if (isGhostType) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        hapticFeedback.triggerAlert(isGhost = true)
+                        return true // Swallow ghost touch down!
+                    }
+
+                    val isHumanTap = humanImpulseGate.isHumanTap(
+                        event = event,
+                        hasImpulse = hasImpulse,
+                        effectiveAccel = effectiveAccel,
+                        greenZones = aiCore.ghostProfile.greenZones,
+                        humanProfile = aiCore.humanProfile,
+                        margin = fingerMargin
+                    )
 
                     if (isHumanTap) {
                         lastHumanUpTime = now
@@ -894,9 +707,6 @@ class HotspotShieldService : Service() {
                         return false // Allow DOWN to pass to underlying app cleanly
                     }
 
-                    // Ghost Candidate: Zero physical shockwave, tiny contact footprint, zero pressure.
-                    // SWALLOW ACTION_DOWN completely so it NEVER reaches the underlying app!
-                    // Full 10D tensor (micro-tremor, dwell, static lock) will be evaluated at ACTION_UP.
                     return true
                 }
 
@@ -904,16 +714,24 @@ class HotspotShieldService : Service() {
                     isPointerDownOnScreen = true
                     lastHumanInteractionTime = event.eventTime
                     movePoints.add(Pair(event.x, event.y))
-                    if (isTouchThrough) {
+                    if (overlayManager.isTouchThrough) {
                         handler.removeCallbacks(reArmRunnable)
                         handler.postDelayed(reArmRunnable, 650L)
                         return false
                     }
-                    // Check for late mechanical shockwave or safe calibrated zone
                     val lateShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 100L)
-                    val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
-                    if (lateShockwave || inGreenZone ||
-                            (aiCore.humanProfile.isValid && aiCore.humanProfile.matchesHuman(0, event.size, event.pressure, impulseSensor.getLastAccelDelta()))) {
+                    val effectiveAccel = if (lateShockwave) max(impulseSensor.getLastAccelDelta(), 0.025f) else impulseSensor.getLastAccelDelta()
+
+                    val isHumanMove = humanImpulseGate.isHumanTap(
+                        event = event,
+                        hasImpulse = lateShockwave,
+                        effectiveAccel = effectiveAccel,
+                        greenZones = aiCore.ghostProfile.greenZones,
+                        humanProfile = aiCore.humanProfile,
+                        margin = fingerMargin
+                    )
+
+                    if (isHumanMove) {
                         lastHumanUpTime = event.eventTime
                         passThroughTemporarily()
                         return false
@@ -926,23 +744,16 @@ class HotspotShieldService : Service() {
                     lastHumanInteractionTime = event.eventTime
                     val dwell = (event.eventTime - pendingDownTime).toInt()
 
-                    // -----------------------------------------------------------------
-                    // ULTRA-FAST DWELL GATE (< 45ms):
-                    // Minimum physical human tap duration is > 60ms.
-                    // Any contact starting and ending in < 45ms is physically impossible
-                    // for human fingers — pure water / electrical capacitance glitch!
-                    // -----------------------------------------------------------------
-                    if (dwell < 45 && toolType != MotionEvent.TOOL_TYPE_STYLUS) {
+                    // ULTRA-FAST DWELL GATE (< 45ms)
+                    if (dwell < 45 && !hasOnlyStylus) {
                         prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        triggerHapticAlert(isGhost = true)
+                        hapticFeedback.triggerAlert(isGhost = true)
                         reArmShieldDirect()
                         return true // SWALLOW INSTANTLY!
                     }
 
-                    val now = event.eventTime
                     val timeSinceHuman = if (lastHumanUpTime > 0L) pendingDownTime - lastHumanUpTime else -1L
                     val timeSinceStylus = if (lastStylusUpTime > 0L) pendingDownTime - lastStylusUpTime else -1L
-                    val interval = if (lastTouchTime > 0L) pendingDownTime - lastTouchTime else dwell.toLong()
 
                     val accelDelta = impulseSensor.getLastAccelDelta()
                     val hasImpulse = impulseSensor.hasMechanicalImpulse(pendingDownTime, windowMs = 120L)
@@ -977,34 +788,56 @@ class HotspotShieldService : Service() {
                         timeSinceStimulusMs = if (timeSinceHuman >= 0) timeSinceHuman else timeSinceStylus
                     )
 
-                    // FIXED: Removed bare `dwell >= 110` from human check — water damage can produce
-                    // long static dwell (40..2000ms) so dwell alone is NOT a human discriminator.
-                    // Human requires PHYSICAL evidence: momentum shockwave, flesh deformation, OR biological micro-tremor.
-                    val isDefiniteHuman = hasImpulse || event.size >= 0.035f || event.pressure >= 0.10f ||
-                            inGreenZone || extendedVector.microTremorVariance >= 0.60f ||
-                            (dwell >= 110 && extendedVector.microTremorVariance >= 0.25f) || // Long dwell only human if tremor present
+                    val isDefiniteHuman = (hasImpulse && fingerMargin.sampleCount >= 3 && fingerMargin.isWithinHumanMargin(event.pressure, event.size, dwell, effectiveAccel)) ||
+                            hasImpulse || inGreenZone || extendedVector.microTremorVariance >= 0.50f ||
+                            (dwell >= 110 && extendedVector.microTremorVariance >= 0.25f && hasImpulse) ||
                             (aiCore.humanProfile.isValid && aiCore.humanProfile.matchesHuman(dwell, event.size, event.pressure, effectiveAccel)) ||
-                            (!masterDecision.isGhost && masterDecision.confidence >= 0.85f)
+                            (!masterDecision.isGhost && masterDecision.confidence >= 0.85f && (hasImpulse || extendedVector.microTremorVariance >= 0.30f))
 
                     if (isDefiniteHuman) {
                         lastHumanUpTime = now
-                        brainEngine.learnOnline(featureVector, isGhost = false)
-                        masterClassifier.learnOnline(extendedVector, isGhost = false)
-                        if (!isTouchThrough) passThroughTemporarily()
+                        aiExecutor.execute {
+                            try {
+                                brainEngine.learnOnline(featureVector, isGhost = false)
+                                masterClassifier.learnOnline(extendedVector, isGhost = false)
+                            } catch (_: Exception) {}
+                        }
+                        if (!overlayManager.isTouchThrough) passThroughTemporarily()
                         return false
                     }
 
-                    if (masterDecision.isGhost) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        masterClassifier.learnOnline(extendedVector, isGhost = true)
-                        brainEngine.learnOnline(featureVector, isGhost = true)
+                    val isGhostType = ghostTypeClassifier.isGhostType(
+                        dwellMs = dwell,
+                        size = event.size,
+                        pressure = event.pressure,
+                        accelDelta = effectiveAccel,
+                        hasImpulse = hasImpulse,
+                        microTremorVar = extendedVector.microTremorVariance,
+                        intervalMs = interval,
+                        isStylus = hasOnlyStylus,
+                        inGreenZone = inGreenZone,
+                        fingerMargin = fingerMargin
+                    )
 
-                        if (masterClassifier.totalOnlineUpdates % 10L == 0L) {
-                            repository.saveBrain(masterClassifier)
-                            prefs.ghostBrainEngineJson = brainEngine.toJson()
+                    if (isGhostType || masterDecision.isGhost) {
+                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        leakSuppressionEngine.registerGhostTouch(event.x, event.y, interval, width, height)
+                        ghostTypeClassifier.learnGhostType(effectiveAccel, extendedVector.microTremorVariance, interval)
+
+                        aiExecutor.execute {
+                            try {
+                                masterClassifier.learnOnline(extendedVector, isGhost = true)
+                                brainEngine.learnOnline(featureVector, isGhost = true)
+                                prefs.ghostTypeClassifierJson = ghostTypeClassifier.toJson()
+
+                                if (masterClassifier.totalOnlineUpdates % 25L == 0L) {
+                                    storageOrganizer.organizeAndCompact(masterClassifier)
+                                    prefs.ghostBrainEngineJson = brainEngine.toJson()
+                                }
+                            } catch (_: Exception) {}
                         }
 
-                        triggerHapticAlert(isGhost = true)
+                        hapticFeedback.triggerAlert(isGhost = true)
                         isPointerDownOnScreen = false
                         reArmShieldDirect()
                         return true
@@ -1015,23 +848,32 @@ class HotspotShieldService : Service() {
                     if (!brainDecision.isGhost) {
                         lastHumanUpTime = now
                         if (brainDecision.confidence >= 0.70f) {
-                            brainEngine.learnOnline(featureVector, isGhost = false)
-                            masterClassifier.learnOnline(extendedVector, isGhost = false)
+                            aiExecutor.execute {
+                                try {
+                                    brainEngine.learnOnline(featureVector, isGhost = false)
+                                    masterClassifier.learnOnline(extendedVector, isGhost = false)
+                                } catch (_: Exception) {}
+                            }
                         }
-                        if (!isTouchThrough) passThroughTemporarily()
+                        if (!overlayManager.isTouchThrough) passThroughTemporarily()
                         return false
                     }
 
                     prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    brainEngine.learnOnline(featureVector, isGhost = true)
-                    masterClassifier.learnOnline(extendedVector, isGhost = true)
+                    leakSuppressionEngine.registerGhostTouch(event.x, event.y, interval, width, height)
+                    aiExecutor.execute {
+                        try {
+                            brainEngine.learnOnline(featureVector, isGhost = true)
+                            masterClassifier.learnOnline(extendedVector, isGhost = true)
 
-                    if (brainEngine.totalOnlineUpdates % 10L == 0L) {
-                        repository.saveBrain(masterClassifier)
-                        prefs.ghostBrainEngineJson = brainEngine.toJson()
+                            if (brainEngine.totalOnlineUpdates % 25L == 0L) {
+                                storageOrganizer.organizeAndCompact(masterClassifier)
+                                prefs.ghostBrainEngineJson = brainEngine.toJson()
+                            }
+                        } catch (_: Exception) {}
                     }
 
-                    triggerHapticAlert(isGhost = true)
+                    hapticFeedback.triggerAlert(isGhost = true)
                     isPointerDownOnScreen = false
                     reArmShieldDirect()
                     return true
@@ -1049,8 +891,6 @@ class HotspotShieldService : Service() {
     }
 
     companion object {
-        const val NOTIFICATION_ID = 2302
-        const val CHANNEL_ID = "ghost_touch_shield_channel"
         const val ACTION_START = "com.antigravity.guardian.SHIELD_START"
         const val ACTION_STOP = "com.antigravity.guardian.SHIELD_STOP"
         const val ACTION_REFRESH_ZONES = "com.antigravity.guardian.SHIELD_REFRESH"

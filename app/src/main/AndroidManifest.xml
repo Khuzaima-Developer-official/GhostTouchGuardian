@@ -84,6 +84,14 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:launchMode="singleTop" />
 
+        <!-- Dedicated Finger Intensity Margin Profiler Activity -->
+        <activity
+            android:name=".ui.FingerMarginProfilerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GhostTouchGuardian.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:launchMode="singleTop" />
+
         <!-- Dedicated Transparent Full-Screen Lock Screen Shield for Samsung One UI Keyguard -->
         <activity
             android:name=".ui.LockScreenShieldActivity"

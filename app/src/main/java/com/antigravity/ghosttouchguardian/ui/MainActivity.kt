@@ -344,6 +344,11 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, CoPilotTrainerActivity::class.java))
         }
 
+        // Dedicated Finger Intensity Margin Profiler
+        binding.btnFingerMarginProfiler.setOnClickListener {
+            startActivity(Intent(this, FingerMarginProfilerActivity::class.java))
+        }
+
         setupBatteryOptimizationButton()
     }
 

@@ -170,6 +170,24 @@ class MasterTouchClassifier(
     var totalUserCorrections: Long = 0L
 
     fun getSupervisoryCount(): Int = supervisoryStore.size
+    fun getSupervisorySamples(): List<SupervisedSample> = supervisoryStore.toList()
+
+    fun setSupervisorySamples(samples: List<SupervisedSample>) {
+        supervisoryStore.clear()
+        supervisoryStore.addAll(samples)
+    }
+
+    /**
+     * Recalculates clusters cleanly from verified supervisory samples,
+     * stripping out any noise, corruption, or false-human drift.
+     */
+    fun recalcClustersFromSanitizedSamples() {
+        humanCluster = MasterCluster.defaultHuman()
+        ghostCluster = MasterCluster.defaultGhost()
+        for (sample in supervisoryStore) {
+            learnOnline(sample.vector, isGhost = sample.isGhost, weight = 2.0f)
+        }
+    }
 
     /**
      * Active Learning Supervisor (User acts as "Half-Brain"):
@@ -263,19 +281,20 @@ class MasterTouchClassifier(
         // 5. Biological Human Invariant Check (Guarantees real fingers are NEVER restricted)
         // Living human finger:
         // - Imparts Newtonian mechanical momentum (accelDelta >= threshold)
-        // - Has fleshy soft tissue deformation (size >= 0.035 or pressure >= 0.10)
-        // - Has involuntary biological micro-tremor variance (microTremorVariance >= 0.60 px²)
-        // - Normal intentional dwell (dwell >= 110 ms with human tremor or flesh)
+        // - Has verified flesh deformation with tremor (size >= 0.050 with physiological micro-tremor)
+        // - Has involuntary biological micro-tremor variance (microTremorVariance >= 0.40 px²)
+        // - Normal intentional dwell (dwell >= 110 ms with human tremor or momentum)
+        // (NOTE: High pressure or size ALONE is rejected because water droplets are highly conductive)
         val hasPhysicalMomentum = vector.accelDelta >= humanCluster.getMinMomentumThreshold()
-        val hasFleshContact = vector.size >= humanCluster.getMinSizeThreshold() || vector.pressure >= humanCluster.getMinPressureThreshold()
-        val hasBiologicalTremor = vector.microTremorVariance >= 0.60f && vector.dwell >= 60f
-        val hasHumanDwell = vector.dwell >= 110f && (hasPhysicalMomentum || hasFleshContact || vector.microTremorVariance >= 0.25f)
+        val hasBiologicalTremor = vector.microTremorVariance >= 0.40f && vector.dwell >= 60f
+        val hasHumanDwell = vector.dwell >= 110f && (hasPhysicalMomentum || vector.microTremorVariance >= 0.25f)
+        val hasVerifiedFlesh = vector.size >= 0.050f && (hasPhysicalMomentum || vector.microTremorVariance >= 0.20f)
 
-        if (hasPhysicalMomentum || hasFleshContact || hasBiologicalTremor || hasHumanDwell) {
+        if (hasPhysicalMomentum || hasBiologicalTremor || hasHumanDwell || hasVerifiedFlesh) {
             val factor = when {
                 hasPhysicalMomentum -> "Newtonian Impact (${String.format("%.3f", vector.accelDelta)} m/s²)"
                 hasBiologicalTremor -> "Biological Micro-Tremor (${String.format("%.2f", vector.microTremorVariance)} px²)"
-                hasFleshContact -> "Flesh Contact (size=${String.format("%.3f", vector.size)})"
+                hasVerifiedFlesh -> "Flesh Contact (size=${String.format("%.3f", vector.size)})"
                 else -> "Human Intentional Dwell (${vector.dwell.toInt()} ms)"
             }
             return MasterDecision(
