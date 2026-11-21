@@ -291,17 +291,41 @@ class MainActivity : AppCompatActivity() {
 
         // Dedicated S Pen Mode toggle
         binding.btnToggleSPenMode.setOnClickListener {
-            prefs.isSPenModeActive = !prefs.isSPenModeActive
-            val spenAction = if (prefs.isSPenModeActive) {
-                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_ENABLE_SPEN_MODE
-            } else {
-                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_DISABLE_SPEN_MODE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                Toast.makeText(this, "Grant 'Appear on top' permission to enable S Pen Mode", Toast.LENGTH_LONG).show()
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+                return@setOnClickListener
             }
-            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
-                action = spenAction
-            })
+
+            prefs.isSPenModeActive = !prefs.isSPenModeActive
+            if (prefs.isSPenModeActive) {
+                prefs.isHotspotShieldEnabled = true
+                val startIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                    action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+                }
+                startService(startIntent)
+
+                val spenIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                    action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_ENABLE_SPEN_MODE
+                }
+                startService(spenIntent)
+            } else {
+                val spenIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                    action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_DISABLE_SPEN_MODE
+                }
+                startService(spenIntent)
+            }
             updateSPenButton()
-            val status = if (prefs.isSPenModeActive) "Dedicated S Pen Mode: Full-Time Active" else "Dedicated S Pen Mode: Deactivated"
+            updateShieldButton()
+            updateAiStatusBadges()
+            val status = if (prefs.isSPenModeActive)
+                "🖊️ Dedicated S Pen Mode: ON (Finger Touch 100% MUTED)"
+            else
+                "🖐️ S Pen Mode: OFF (Finger Touch Restored)"
             Toast.makeText(this, status, Toast.LENGTH_SHORT).show()
         }
     }

@@ -139,6 +139,25 @@ class TouchGuardianService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
+            ACTION_TOGGLE_SPEN -> {
+                prefs.isSPenModeActive = !prefs.isSPenModeActive
+                if (prefs.isSPenModeActive) {
+                    prefs.isHotspotShieldEnabled = true
+                    startService(Intent(this, HotspotShieldService::class.java).apply {
+                        action = HotspotShieldService.ACTION_START
+                    })
+                    startService(Intent(this, HotspotShieldService::class.java).apply {
+                        action = HotspotShieldService.ACTION_ENABLE_SPEN_MODE
+                    })
+                } else {
+                    startService(Intent(this, HotspotShieldService::class.java).apply {
+                        action = HotspotShieldService.ACTION_DISABLE_SPEN_MODE
+                    })
+                }
+                val notification = buildNotification(temporalFilter.isEnabled)
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(NOTIFICATION_ID, notification)
+            }
         }
         return START_STICKY
     }
@@ -208,8 +227,18 @@ class TouchGuardianService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val spenToggleIntent = Intent(this, TouchGuardianService::class.java).apply {
+            action = ACTION_TOGGLE_SPEN
+        }
+        val pendingSPenToggle = PendingIntent.getService(
+            this, 2, spenToggleIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val profileTitle = profiler.profile.title
-        val statusText = if (isActive) {
+        val statusText = if (prefs.isSPenModeActive) {
+            "🖊️ S Pen Exclusive ON • Finger Touch 100% MUTED"
+        } else if (isActive) {
             if (blockedAnomalyCount > 0) {
                 "Active • $blockedAnomalyCount Caught ($lastAnomalySummary)"
             } else {
@@ -229,6 +258,11 @@ class TouchGuardianService : Service() {
                 R.drawable.ic_shield,
                 if (isActive) "Pause" else "Resume",
                 pendingToggle
+            )
+            .addAction(
+                R.drawable.ic_shield,
+                if (prefs.isSPenModeActive) "🖊️ S-Pen: ON" else "🖊️ S-Pen: OFF",
+                pendingSPenToggle
             )
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
@@ -258,6 +292,7 @@ class TouchGuardianService : Service() {
         const val ACTION_START = "com.antigravity.guardian.START"
         const val ACTION_STOP = "com.antigravity.guardian.STOP"
         const val ACTION_TOGGLE = "com.antigravity.guardian.TOGGLE"
+        const val ACTION_TOGGLE_SPEN = "com.antigravity.guardian.TOGGLE_SPEN"
         const val ACTION_FLUSH = "com.antigravity.guardian.FLUSH"
         const val ACTION_UPDATE_PROFILE = "com.antigravity.guardian.UPDATE_PROFILE"
 
