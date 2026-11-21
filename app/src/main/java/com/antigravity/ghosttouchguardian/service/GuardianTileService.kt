@@ -16,11 +16,16 @@ class GuardianTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val service = TouchGuardianService.instance
-        if (service != null) {
-            val intent = Intent(this, TouchGuardianService::class.java).apply {
-                action = TouchGuardianService.ACTION_TOGGLE
+        val intent = Intent(this, TouchGuardianService::class.java).apply {
+            action = if (TouchGuardianService.instance != null) {
+                TouchGuardianService.ACTION_TOGGLE
+            } else {
+                TouchGuardianService.ACTION_START
             }
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
             startService(intent)
         }
         updateTileState()

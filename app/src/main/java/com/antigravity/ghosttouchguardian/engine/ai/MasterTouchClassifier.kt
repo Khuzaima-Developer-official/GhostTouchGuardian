@@ -359,8 +359,8 @@ class MasterTouchClassifier(
             }
         }
 
-        // If distance is within close neighbor radius (0.80 normalized units)
-        return if (minDistance <= 0.80f) bestSample else null
+        // If distance is within close neighbor radius (0.45 normalized units — tightened from 0.80 to prevent false matches)
+        return if (minDistance <= 0.45f) bestSample else null
     }
 
     fun toJson(): String {

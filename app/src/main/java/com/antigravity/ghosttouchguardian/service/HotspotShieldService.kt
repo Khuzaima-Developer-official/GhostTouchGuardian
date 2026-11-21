@@ -177,8 +177,11 @@ class HotspotShieldService : Service() {
                 aiCore.isSPenModeActive = false
                 brainEngine.isSPenModeActive = false
                 masterClassifier.isSPenModeActive = false
-                reArmShieldDirect()
-                overlayView?.postInvalidate()
+                removeOverlay()
+                if (prefs.isHotspotShieldEnabled && checkOverlayPermission()) {
+                    reloadProfiles()
+                    attachOverlay()
+                }
             }
         }
         return START_STICKY
@@ -571,7 +574,12 @@ class HotspotShieldService : Service() {
 
                     val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
 
-                    // If physical shockwave, fleshy deformation, green safe zone, or human profile matches:
+                    // Evaluates physical human evidence:
+                    // 1. Accelerometer shockwave (phone chassis impulse from finger strike)
+                    // 2. Soft-tissue spread (fleshy contact area size >= 0.035)
+                    // 3. True capacitive pressure (voltage delta >= 0.10)
+                    // 4. Safe green zone from calibration
+                    // 5. Learned human profile match
                     val isHumanTap = hasImpulse || event.size >= 0.035f || event.pressure >= 0.10f || inGreenZone ||
                             (aiCore.humanProfile.isValid && aiCore.humanProfile.matchesHuman(0, event.size, event.pressure, effectiveAccel))
 
@@ -581,7 +589,9 @@ class HotspotShieldService : Service() {
                         return false // Allow DOWN to pass to underlying app cleanly
                     }
 
-                    // Ghost candidate: Wait and evaluate at ACTION_UP where dwell is known
+                    // Ghost Candidate: Zero physical shockwave, tiny contact footprint, zero pressure.
+                    // SWALLOW ACTION_DOWN completely so it NEVER reaches the underlying app!
+                    // Full 10D tensor (micro-tremor, dwell, static lock) will be evaluated at ACTION_UP.
                     return true
                 }
 
@@ -594,13 +604,14 @@ class HotspotShieldService : Service() {
                         handler.postDelayed(reArmRunnable, 1200L)
                         return false
                     }
+                    // Check for late mechanical shockwave or fleshy drag expansion
                     val lateShockwave = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 100L)
                     if (lateShockwave || event.size >= 0.035f || event.pressure >= 0.10f) {
                         lastHumanUpTime = event.eventTime
                         passThroughTemporarily()
                         return false
                     }
-                    return true // Swallow ghost drag
+                    return true // Swallow ghost smear/drag
                 }
 
                 MotionEvent.ACTION_UP -> {
@@ -645,8 +656,12 @@ class HotspotShieldService : Service() {
                         timeSinceStimulusMs = if (timeSinceHuman >= 0) timeSinceHuman else timeSinceStylus
                     )
 
+                    // FIXED: Removed bare `dwell >= 110` from human check — water damage can produce
+                    // long static dwell (40..2000ms) so dwell alone is NOT a human discriminator.
+                    // Human requires PHYSICAL evidence: momentum shockwave, flesh deformation, OR biological micro-tremor.
                     val isDefiniteHuman = hasImpulse || event.size >= 0.035f || event.pressure >= 0.10f ||
-                            dwell >= 110 || inGreenZone || extendedVector.microTremorVariance >= 0.60f ||
+                            inGreenZone || extendedVector.microTremorVariance >= 0.60f ||
+                            (dwell >= 110 && extendedVector.microTremorVariance >= 0.25f) || // Long dwell only human if tremor present
                             (aiCore.humanProfile.isValid && aiCore.humanProfile.matchesHuman(dwell, event.size, event.pressure, effectiveAccel)) ||
                             (!masterDecision.isGhost && masterDecision.confidence >= 0.85f)
 
@@ -668,13 +683,9 @@ class HotspotShieldService : Service() {
                             prefs.ghostBrainEngineJson = brainEngine.toJson()
                         }
 
-                        val cancelEvent = MotionEvent.obtain(event).also {
-                            it.action = MotionEvent.ACTION_CANCEL
-                        }
-                        try {
-                            super.onTouchEvent(cancelEvent)
-                        } catch (_: Exception) {}
-                        cancelEvent.recycle()
+                        triggerHapticAlert(isGhost = true)
+                        isPointerDownOnScreen = false
+                        reArmShieldDirect()
                         return true
                     }
 
@@ -699,13 +710,9 @@ class HotspotShieldService : Service() {
                         prefs.ghostBrainEngineJson = brainEngine.toJson()
                     }
 
-                    val cancelEvent = MotionEvent.obtain(event).also {
-                        it.action = MotionEvent.ACTION_CANCEL
-                    }
-                    try {
-                        super.onTouchEvent(cancelEvent)
-                    } catch (_: Exception) {}
-                    cancelEvent.recycle()
+                    triggerHapticAlert(isGhost = true)
+                    isPointerDownOnScreen = false
+                    reArmShieldDirect()
                     return true
                 }
 
