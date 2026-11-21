@@ -77,12 +77,13 @@ class TouchGuardianService : Service() {
                 isScreenActive = true
                 temporalFilter.isEnabled = prefs.isGuardianEnabled
                 impulseSensor?.start()
-                // Notify HotspotShieldService: screen just woke — activate 1500ms ghost-burst guard
-                // Damaged digitizer fires ghost touches when screen turns on (wake burst)
-                val wakeGuardIntent = Intent(this@TouchGuardianService, HotspotShieldService::class.java).apply {
-                    action = HotspotShieldService.ACTION_SCREEN_WAKE_GUARD
+                // Auto-revive HotspotShieldService as foreground service if needed
+                if (prefs.isHotspotShieldEnabled || prefs.isSPenModeActive) {
+                    val wakeGuardIntent = Intent(this@TouchGuardianService, HotspotShieldService::class.java).apply {
+                        action = HotspotShieldService.ACTION_SCREEN_WAKE_GUARD
+                    }
+                    try { ContextCompat.startForegroundService(this@TouchGuardianService, wakeGuardIntent) } catch (_: Exception) {}
                 }
-                try { startService(wakeGuardIntent) } catch (_: Exception) {}
             },
             onScreenOff = {
                 isScreenActive = false
@@ -93,7 +94,7 @@ class TouchGuardianService : Service() {
                 val screenOffIntent = Intent(this@TouchGuardianService, HotspotShieldService::class.java).apply {
                     action = HotspotShieldService.ACTION_SCREEN_OFF
                 }
-                try { startService(screenOffIntent) } catch (_: Exception) {}
+                try { ContextCompat.startForegroundService(this@TouchGuardianService, screenOffIntent) } catch (_: Exception) {}
             }
         )
 
@@ -107,6 +108,14 @@ class TouchGuardianService : Service() {
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+
+        // Ensure HotspotShieldService is active if enabled in prefs
+        if (prefs.isHotspotShieldEnabled || prefs.isSPenModeActive) {
+            val shieldIntent = Intent(this, HotspotShieldService::class.java).apply {
+                action = if (prefs.isSPenModeActive) HotspotShieldService.ACTION_ENABLE_SPEN_MODE else HotspotShieldService.ACTION_START
+            }
+            try { ContextCompat.startForegroundService(this, shieldIntent) } catch (_: Exception) {}
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -143,16 +152,15 @@ class TouchGuardianService : Service() {
                 prefs.isSPenModeActive = !prefs.isSPenModeActive
                 if (prefs.isSPenModeActive) {
                     prefs.isHotspotShieldEnabled = true
-                    startService(Intent(this, HotspotShieldService::class.java).apply {
-                        action = HotspotShieldService.ACTION_START
-                    })
-                    startService(Intent(this, HotspotShieldService::class.java).apply {
+                    val spenIntent = Intent(this, HotspotShieldService::class.java).apply {
                         action = HotspotShieldService.ACTION_ENABLE_SPEN_MODE
-                    })
+                    }
+                    try { ContextCompat.startForegroundService(this, spenIntent) } catch (_: Exception) {}
                 } else {
-                    startService(Intent(this, HotspotShieldService::class.java).apply {
+                    val spenIntent = Intent(this, HotspotShieldService::class.java).apply {
                         action = HotspotShieldService.ACTION_DISABLE_SPEN_MODE
-                    })
+                    }
+                    try { ContextCompat.startForegroundService(this, spenIntent) } catch (_: Exception) {}
                 }
                 val notification = buildNotification(temporalFilter.isEnabled)
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

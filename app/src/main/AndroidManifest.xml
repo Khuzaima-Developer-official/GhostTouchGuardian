@@ -18,6 +18,9 @@
     <!-- Active Shield Overlay for consuming phantom touches -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- 24/7 Unrestricted Background Execution (Prevents Samsung One UI from sleeping app) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Android 11+ package visibility for dialer + settings -->
     <queries>
         <intent>
@@ -81,11 +84,16 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:launchMode="singleTop" />
 
-        <!-- Active Hotspot Shield Overlay Service -->
+        <!-- Active Hotspot Shield Overlay Service (Foreground Service for 24/7 Overlay Protection) -->
         <service
             android:name=".service.HotspotShieldService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Screen Touch Shield Overlay" />
+        </service>
 
         <!-- Persistent, Ultra-low-overhead Guardian Service -->
         <service

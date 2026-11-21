@@ -365,6 +365,20 @@
                     android:textStyle="bold"
                     app:cornerRadius="12dp"
                     app:strokeColor="#B388FF" />
+
+                <!-- 24/7 Samsung Unrestricted Background Protection Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBatteryOptimization"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="⚡ 24/7 Samsung Unrestricted: Checking..."
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/accent_cyan" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

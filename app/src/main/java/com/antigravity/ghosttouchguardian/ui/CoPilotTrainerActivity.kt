@@ -453,12 +453,10 @@ class CoPilotTrainerActivity : AppCompatActivity() {
 
         // Resume background shield service upon exit
         if (prefs.isHotspotShieldEnabled) {
-            startService(Intent(this, HotspotShieldService::class.java).apply {
+            val refreshIntent = Intent(this, HotspotShieldService::class.java).apply {
                 action = HotspotShieldService.ACTION_REFRESH_ZONES
-            })
-            startService(Intent(this, HotspotShieldService::class.java).apply {
-                action = HotspotShieldService.ACTION_START
-            })
+            }
+            androidx.core.content.ContextCompat.startForegroundService(this, refreshIntent)
         }
     }
 }

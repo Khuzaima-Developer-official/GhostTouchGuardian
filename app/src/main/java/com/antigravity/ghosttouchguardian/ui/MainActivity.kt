@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         updateDashboard()
         updateShieldButton()
         updateSPenButton()
+        updateBatteryOptimizationButton()
         updateAiStatusBadges()
         renderActiveProfile(prefs.currentProfile)
     }
@@ -278,14 +279,17 @@ class MainActivity : AppCompatActivity() {
             }
 
             prefs.isHotspotShieldEnabled = !prefs.isHotspotShieldEnabled
-            val shieldAction = if (prefs.isHotspotShieldEnabled) {
-                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+            if (prefs.isHotspotShieldEnabled) {
+                val shieldIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                    action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
+                }
+                androidx.core.content.ContextCompat.startForegroundService(this, shieldIntent)
             } else {
-                com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_STOP
+                val shieldIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                    action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_STOP
+                }
+                startService(shieldIntent)
             }
-            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
-                action = shieldAction
-            })
             updateShieldButton()
         }
 
@@ -304,15 +308,10 @@ class MainActivity : AppCompatActivity() {
             prefs.isSPenModeActive = !prefs.isSPenModeActive
             if (prefs.isSPenModeActive) {
                 prefs.isHotspotShieldEnabled = true
-                val startIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
-                    action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
-                }
-                startService(startIntent)
-
                 val spenIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                     action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_ENABLE_SPEN_MODE
                 }
-                startService(spenIntent)
+                androidx.core.content.ContextCompat.startForegroundService(this, spenIntent)
             } else {
                 val spenIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                     action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_DISABLE_SPEN_MODE
@@ -327,6 +326,42 @@ class MainActivity : AppCompatActivity() {
             else
                 "🖐️ S Pen Mode: OFF (Finger Touch Restored)"
             Toast.makeText(this, status, Toast.LENGTH_SHORT).show()
+        }
+
+        setupBatteryOptimizationButton()
+    }
+
+    private fun setupBatteryOptimizationButton() {
+        binding.btnBatteryOptimization.setOnClickListener {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = getSystemService(android.os.PowerManager::class.java)
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+                    val intent = Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(intent)
+                } else {
+                    Toast.makeText(this, "✅ 24/7 Unrestricted Mode Active! Samsung will never sleep this app.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        updateBatteryOptimizationButton()
+    }
+
+    private fun updateBatteryOptimizationButton() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = getSystemService(android.os.PowerManager::class.java)
+            val isUnrestricted = pm?.isIgnoringBatteryOptimizations(packageName) == true
+            if (isUnrestricted) {
+                binding.btnBatteryOptimization.text = "⚡ 24/7 Samsung Unrestricted: ACTIVE (Never Sleep)"
+                binding.btnBatteryOptimization.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
+                binding.btnBatteryOptimization.strokeColor = ContextCompat.getColorStateList(this, R.color.valid_green)
+            } else {
+                binding.btnBatteryOptimization.text = "⚡ Fix Samsung Sleep: TAP TO ALLOW 24/7 UNRESTRICTED"
+                binding.btnBatteryOptimization.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+                binding.btnBatteryOptimization.strokeColor = ContextCompat.getColorStateList(this, R.color.accent_cyan)
+            }
         }
     }
 

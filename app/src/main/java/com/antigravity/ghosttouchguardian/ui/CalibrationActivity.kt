@@ -208,9 +208,10 @@ class CalibrationActivity : AppCompatActivity() {
                 Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             )
         } else {
-            startService(Intent(this, HotspotShieldService::class.java).apply {
+            val startIntent = Intent(this, HotspotShieldService::class.java).apply {
                 action = HotspotShieldService.ACTION_START
-            })
+            }
+            androidx.core.content.ContextCompat.startForegroundService(this, startIntent)
             Toast.makeText(this, "✅ Hotspot Shield Activated!", Toast.LENGTH_SHORT).show()
         }
         finish()
@@ -229,9 +230,10 @@ class CalibrationActivity : AppCompatActivity() {
 
         // Resume Hotspot Shield service upon exiting Calibration Mode
         if (prefs.isHotspotShieldEnabled) {
-            startService(Intent(this, HotspotShieldService::class.java).apply {
+            val startIntent = Intent(this, HotspotShieldService::class.java).apply {
                 action = HotspotShieldService.ACTION_START
-            })
+            }
+            androidx.core.content.ContextCompat.startForegroundService(this, startIntent)
         }
     }
 }

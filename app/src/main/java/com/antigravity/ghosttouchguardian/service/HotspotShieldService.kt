@@ -1,8 +1,13 @@
 package com.antigravity.ghosttouchguardian.service
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -20,6 +25,8 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.core.app.NotificationCompat
+import com.antigravity.ghosttouchguardian.R
 import com.antigravity.ghosttouchguardian.data.CompactTouchRepository
 import com.antigravity.ghosttouchguardian.data.GuardianPreferences
 import com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine
@@ -33,6 +40,7 @@ import com.antigravity.ghosttouchguardian.model.GhostGlitchProfile
 import com.antigravity.ghosttouchguardian.model.HumanFingerProfile
 import com.antigravity.ghosttouchguardian.model.TouchFeatureVector
 import com.antigravity.ghosttouchguardian.sensor.MechanicalImpulseSensor
+import com.antigravity.ghosttouchguardian.ui.MainActivity
 import kotlin.math.max
 
 /**
@@ -122,26 +130,45 @@ class HotspotShieldService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        createNotificationChannel()
+        val notification = buildNotification()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (_: Exception) {}
+        isShieldRunning = true
+
         when (intent?.action) {
             ACTION_START -> {
                 reloadProfiles()
                 if (checkOverlayPermission()) attachOverlay()
+                updateNotification()
             }
             ACTION_STOP -> {
+                prefs.isHotspotShieldEnabled = false
+                isShieldRunning = false
                 removeOverlay()
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+                return START_NOT_STICKY
             }
             ACTION_PAUSE -> {
                 removeOverlay()
+                updateNotification()
             }
             ACTION_RESUME -> {
                 reloadProfiles()
                 if (checkOverlayPermission()) attachOverlay()
+                updateNotification()
             }
             ACTION_REFRESH_ZONES -> {
                 reloadProfiles()
                 removeOverlay()
                 if (checkOverlayPermission()) attachOverlay()
+                updateNotification()
             }
             ACTION_SCREEN_WAKE_GUARD -> {
                 isScreenWakeGuardActive = true
@@ -171,6 +198,7 @@ class HotspotShieldService : Service() {
                     reArmShieldDirect()
                     overlayView?.postInvalidate()
                 }
+                updateNotification()
             }
             ACTION_DISABLE_SPEN_MODE -> {
                 prefs.isSPenModeActive = false
@@ -182,9 +210,111 @@ class HotspotShieldService : Service() {
                     reloadProfiles()
                     attachOverlay()
                 }
+                updateNotification()
+            }
+            ACTION_TOGGLE_SPEN_MODE -> {
+                prefs.isSPenModeActive = !prefs.isSPenModeActive
+                aiCore.isSPenModeActive = prefs.isSPenModeActive
+                brainEngine.isSPenModeActive = prefs.isSPenModeActive
+                masterClassifier.isSPenModeActive = prefs.isSPenModeActive
+
+                if (prefs.isSPenModeActive) {
+                    prefs.isHotspotShieldEnabled = true
+                    if (checkOverlayPermission()) {
+                        removeOverlay()
+                        attachOverlay()
+                        reArmShieldDirect()
+                    }
+                } else {
+                    removeOverlay()
+                    if (prefs.isHotspotShieldEnabled && checkOverlayPermission()) {
+                        reloadProfiles()
+                        attachOverlay()
+                    }
+                }
+                updateNotification()
+                overlayView?.postInvalidate()
             }
         }
         return START_STICKY
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Ghost Touch Active Shield",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "24/7 Persistent Touch Interception & S Pen Gate"
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun buildNotification(): Notification {
+        val launchIntent = Intent(this, MainActivity::class.java)
+        val pendingLaunch = PendingIntent.getActivity(
+            this, 0, launchIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Stop action: Turns shield off, removes overlay and dismisses notification
+        val stopIntent = Intent(this, HotspotShieldService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val pendingStop = PendingIntent.getService(
+            this, 10, stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Toggle S Pen action directly from notification
+        val spenToggleIntent = Intent(this, HotspotShieldService::class.java).apply {
+            action = ACTION_TOGGLE_SPEN_MODE
+        }
+        val pendingSPenToggle = PendingIntent.getService(
+            this, 11, spenToggleIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val title = if (prefs.isSPenModeActive) {
+            "🖊️ S Pen Exclusive: ON (100% Finger Muted)"
+        } else {
+            "🛡️ Ghost Touch Shield: ACTIVE"
+        }
+
+        val text = if (prefs.isSPenModeActive) {
+            "Capacitive input blocked • Only Wacom EMR passing"
+        } else {
+            val blocked = prefs.totalBlockedGhosts
+            "24/7 Protection Running • $blocked Glitches Blocked"
+        }
+
+        val spenButtonText = if (prefs.isSPenModeActive) "🖊️ S-Pen: ON" else "🖊️ S-Pen: OFF"
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_shield)
+            .setOngoing(true) // Un-swipeable! NEVER DISAPPEARS UNTIL TURNED OFF
+            .setAutoCancel(false)
+            .setContentIntent(pendingLaunch)
+            .addAction(R.drawable.ic_shield, spenButtonText, pendingSPenToggle)
+            .addAction(R.drawable.ic_shield, "🛑 Turn Shield OFF", pendingStop)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+    }
+
+    private fun updateNotification() {
+        try {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            manager?.notify(NOTIFICATION_ID, buildNotification())
+        } catch (_: Exception) {}
     }
 
     private fun checkOverlayPermission(): Boolean {
@@ -353,6 +483,7 @@ class HotspotShieldService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isShieldRunning = false
         removeOverlay()
         impulseSensor.stop()
     }
@@ -728,6 +859,8 @@ class HotspotShieldService : Service() {
     }
 
     companion object {
+        const val NOTIFICATION_ID = 2302
+        const val CHANNEL_ID = "ghost_touch_shield_channel"
         const val ACTION_START = "com.antigravity.guardian.SHIELD_START"
         const val ACTION_STOP = "com.antigravity.guardian.SHIELD_STOP"
         const val ACTION_REFRESH_ZONES = "com.antigravity.guardian.SHIELD_REFRESH"
@@ -737,5 +870,10 @@ class HotspotShieldService : Service() {
         const val ACTION_SCREEN_OFF = "com.antigravity.guardian.SHIELD_SCREEN_OFF"
         const val ACTION_ENABLE_SPEN_MODE = "com.antigravity.guardian.ENABLE_SPEN_MODE"
         const val ACTION_DISABLE_SPEN_MODE = "com.antigravity.guardian.DISABLE_SPEN_MODE"
+        const val ACTION_TOGGLE_SPEN_MODE = "com.antigravity.guardian.TOGGLE_SPEN_FROM_NOTIF"
+
+        @Volatile
+        var isShieldRunning: Boolean = false
+            private set
     }
 }

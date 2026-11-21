@@ -223,9 +223,10 @@ class TestLabActivity : AppCompatActivity() {
 
         // Resume Hotspot Shield service upon exiting Test Lab
         if (prefs.isHotspotShieldEnabled) {
-            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+            val startIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                 action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
-            })
+            }
+            androidx.core.content.ContextCompat.startForegroundService(this, startIntent)
         }
     }
 }

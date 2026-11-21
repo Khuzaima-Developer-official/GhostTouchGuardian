@@ -413,12 +413,10 @@ class GhostIdentifyActivity : AppCompatActivity() {
             }
 
             // Start HotspotShieldService with AI Core and refreshed zones
-            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+            val shieldIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                 action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_REFRESH_ZONES
-            })
-            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
-                action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
-            })
+            }
+            androidx.core.content.ContextCompat.startForegroundService(this, shieldIntent)
 
             Toast.makeText(this, "✅ GhostMind AI Shield Activated Successfully!", Toast.LENGTH_LONG).show()
             finish()
@@ -446,9 +444,10 @@ class GhostIdentifyActivity : AppCompatActivity() {
 
         // Resume shield upon exit
         if (prefs.isHotspotShieldEnabled) {
-            startService(Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+            val shieldIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
                 action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_START
-            })
+            }
+            androidx.core.content.ContextCompat.startForegroundService(this, shieldIntent)
         }
     }
 }
