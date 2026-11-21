@@ -214,15 +214,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupActions() {
-        // Open lab
-        binding.btnLaunchTestLab.setOnClickListener {
-            startActivity(Intent(this, TestLabActivity::class.java))
-        }
-
-        binding.cardOpenLab.setOnClickListener {
-            startActivity(Intent(this, TestLabActivity::class.java))
-        }
-
         // Toggle service
         binding.btnToggleGuardian.setOnClickListener {
             val intent = Intent(this, TouchGuardianService::class.java).apply {
@@ -259,32 +250,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupCalibrationCard() {
-        // AI Co-Pilot (Teach AI Brain) click
-        binding.btnLaunchCoPilot.setOnClickListener {
-            startActivity(Intent(this, CoPilotTrainerActivity::class.java))
-        }
-
-        // Ghost Identify (Fingerprint Learning) click
-        binding.btnGhostIdentify.setOnClickListener {
-            startActivity(Intent(this, GhostIdentifyActivity::class.java))
-        }
-
-        // Calibration click
-        binding.btnAutoCalibrateScreen.setOnClickListener {
-            startActivity(Intent(this, CalibrationActivity::class.java))
-        }
-
-        // Shield toggle
+        // Master Shield toggle
         binding.btnToggleHotspotShield.setOnClickListener {
-            val hasZones = prefs.savedHotspotsJson.isNotBlank()
-            val hasFp = prefs.ghostFingerprintJson.isNotBlank()
-            val hasAiProfile = prefs.ghostGlitchProfileJson.isNotBlank()
-            if (!hasZones && !hasFp && !hasAiProfile) {
-                Toast.makeText(this, "Run Ghost Identify or Calibration first to learn ghost patterns!", Toast.LENGTH_SHORT).show()
-                startActivity(Intent(this, GhostIdentifyActivity::class.java))
-                return@setOnClickListener
-            }
-
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 Toast.makeText(this, "Grant 'Appear on top' permission to enable Shield", Toast.LENGTH_LONG).show()
                 val intent = Intent(
@@ -308,6 +275,7 @@ class MainActivity : AppCompatActivity() {
                 startService(shieldIntent)
             }
             updateShieldButton()
+            updateAiStatusBadges()
         }
 
         // Dedicated S Pen Mode toggle
@@ -343,6 +311,32 @@ class MainActivity : AppCompatActivity() {
             else
                 "🖐️ S Pen Mode: OFF (Finger Touch Restored)"
             Toast.makeText(this, status, Toast.LENGTH_SHORT).show()
+        }
+
+        // 1-Tap Reset All Learned Data
+        binding.btnResetLearnedData.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Reset Ghost & Brain Data?")
+                .setMessage("Agar aap ne galti se finger touch ko ghost mark kar diya tha, to yeh button saara purana data clear karke app ko factory clean default state mein reset kar dega.")
+                .setPositiveButton("Reset Now") { _, _ ->
+                    prefs.resetAllLearnedProfiles()
+                    com.antigravity.ghosttouchguardian.data.CompactTouchRepository(this).resetBrain()
+                    prefs.totalBlockedGhosts = 0L
+                    prefs.totalBlockedEchoes = 0L
+
+                    val resetIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                        action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_RESET_DATA
+                    }
+                    startService(resetIntent)
+
+                    updateDashboard()
+                    updateShieldButton()
+                    updateSPenButton()
+                    updateAiStatusBadges()
+                    Toast.makeText(this, "✅ All Data Reset to Clean Factory State!", Toast.LENGTH_LONG).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         setupBatteryOptimizationButton()
@@ -395,74 +389,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateShieldButton() {
-        // Update shield
-        val hasZones = prefs.savedHotspotsJson.isNotBlank()
-        val hasFp = prefs.ghostFingerprintJson.isNotBlank()
-        val hasAiProfile = prefs.ghostGlitchProfileJson.isNotBlank()
-        val hasBrain = prefs.ghostBrainEngineJson.isNotBlank()
-        val isCalibrated = hasZones || hasFp || hasAiProfile || hasBrain
-        val zones = com.antigravity.ghosttouchguardian.engine.GhostCalibrationEngine.parseZonesFromJson(prefs.savedHotspotsJson)
-
-        if (prefs.isHotspotShieldEnabled && isCalibrated) {
-            val guardDetails = when {
-                hasBrain -> "8D Bayesian AI Brain"
-                hasAiProfile -> "GhostMind AI Profile"
-                hasFp -> "Fingerprint & ${zones.size} Zones"
-                else -> "${zones.size} Zones"
-            }
-            binding.btnToggleHotspotShield.text = "Hotspot Shield: ACTIVE ($guardDetails Guarded)"
-            binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
-            binding.btnToggleHotspotShield.strokeColor = ContextCompat.getColorStateList(this, R.color.valid_green)
+        if (prefs.isHotspotShieldEnabled) {
+            binding.btnToggleHotspotShield.text = "🛡️ GHOST TOUCH SHIELD: ACTIVE (45ms Spam Filter ON)"
+            binding.btnToggleHotspotShield.setBackgroundColor(ContextCompat.getColor(this, R.color.valid_green))
+            binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, android.R.color.white))
         } else {
-            val status = if (isCalibrated) "Hotspot Shield: OFF (Ready to Activate)" else "Hotspot Shield: OFF (Not Calibrated)"
-            binding.btnToggleHotspotShield.text = status
-            binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, R.color.ghost_red))
-            binding.btnToggleHotspotShield.strokeColor = ContextCompat.getColorStateList(this, R.color.ghost_red)
+            binding.btnToggleHotspotShield.text = "🛡️ GHOST TOUCH SHIELD: OFF (Tap to Activate)"
+            binding.btnToggleHotspotShield.setBackgroundColor(ContextCompat.getColor(this, R.color.ghost_red))
+            binding.btnToggleHotspotShield.setTextColor(ContextCompat.getColor(this, android.R.color.white))
         }
     }
 
     private fun updateAiStatusBadges() {
-        // 1. Finger Profile
-        val humanProfile = com.antigravity.ghosttouchguardian.model.HumanFingerProfile.fromJson(prefs.humanFingerProfileJson)
-        if (humanProfile.isValid) {
-            binding.tvAiFingerStatus.text = "🟢 Real Finger Profile: LOCKED (100% Native Pass-Through)"
-            binding.tvAiFingerStatus.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
-        } else {
-            binding.tvAiFingerStatus.text = "🟢 Real Finger Profile: Not Calibrated (Tap Step 1 to Lock)"
-            binding.tvAiFingerStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-        }
+        binding.tvAiFingerStatus.text = "⚡ 45ms Spam Filter: ACTIVE (Touches < 45ms dropped instantly)"
+        binding.tvAiFingerStatus.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
 
-        // 2. 8D Bayesian Ghost Brain & S23 Ultra Touch Master
-        val masterClassifier = com.antigravity.ghosttouchguardian.data.CompactTouchRepository(this).loadBrain()
-        val brainEngine = com.antigravity.ghosttouchguardian.engine.ai.GhostBrainEngine.fromJson(prefs.ghostBrainEngineJson)
-        val ghostProfile = com.antigravity.ghosttouchguardian.model.GhostGlitchProfile.fromJson(prefs.ghostGlitchProfileJson)
+        binding.tvAiGhostStatus.text = "🔬 Physical Gate: Mechanical impulse & flesh area active"
+        binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
 
-        if (masterClassifier.totalUserCorrections > 0L || masterClassifier.getSupervisoryCount() > 0) {
-            binding.tvAiGhostStatus.text = "🔴 S23U Touch Master: ACTIVE (${masterClassifier.getSupervisoryCount()} water signatures, ${masterClassifier.totalUserCorrections} corrections)"
-            binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
-        } else if (brainEngine.ghostCluster.sampleCount > 5 || brainEngine.totalOnlineUpdates > 0L) {
-            binding.tvAiGhostStatus.text = "🔴 8D AI Brain: ACTIVE (${brainEngine.ghostCluster.sampleCount} glitches, ${brainEngine.totalOnlineUpdates} online updates)"
-            binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
-        } else if (ghostProfile.isValid) {
-            binding.tvAiGhostStatus.text = "🔴 Ghost Spectrum: [${ghostProfile.minDwell}..${ghostProfile.maxDwell}ms], Band [${ghostProfile.minIntervalMs}..${ghostProfile.maxIntervalMs}ms]"
-            binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
-        } else {
-            val hasZones = prefs.savedHotspotsJson.isNotBlank()
-            if (hasZones) {
-                binding.tvAiGhostStatus.text = "🔴 Glitch Map: Calibrated Zone Hotspots"
-                binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
-            } else {
-                binding.tvAiGhostStatus.text = "🔴 8D Ghost Brain: Not Calibrated (Tap Step 1 to Learn)"
-                binding.tvAiGhostStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-            }
-        }
-
-        // 3. Dedicated S Pen Status
         if (prefs.isSPenModeActive) {
-            binding.tvAiSPenStatus.text = "🖊️ Dedicated S Pen: 100% CAPACITIVE MUTED (EMR Magnetic Pure)"
-            binding.tvAiSPenStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+            binding.tvAiSPenStatus.text = "🖊️ S Pen Exclusive: ON (Notification toggle enabled)"
+            binding.tvAiSPenStatus.setTextColor(ContextCompat.getColor(this, R.color.valid_green))
         } else {
-            binding.tvAiSPenStatus.text = "🖊️ Dedicated S Pen: OFF (Tap toggle below)"
+            binding.tvAiSPenStatus.text = "🖊️ S Pen Exclusive: OFF (Notification toggle ready)"
             binding.tvAiSPenStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
         }
     }

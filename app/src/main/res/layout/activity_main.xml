@@ -162,68 +162,8 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Lab launcher card -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardOpenLab"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="#0D172A"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="0dp"
-            app:strokeColor="@color/accent_blue"
-            app:strokeWidth="2dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="18dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="GHOST TOUCH TEST LAB"
-                    android:textColor="@color/accent_cyan"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.07" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Dedicated full-screen test arena"
-                    android:textColor="@color/text_primary"
-                    android:textSize="17sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="Screen locks against accidental ghost taps. Exit only via human-verified finger slide. Set protection level above before entering."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp"
-                    android:lineSpacingExtra="2dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnLaunchTestLab"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:layout_marginTop="14dp"
-                    android:text="START TEST LAB"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="@color/accent_blue"
-                    app:cornerRadius="12dp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- AI Ghost Auto-Learning & Shield Card -->
+        <!-- Main Guardian Controls Card -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardGhostLearning"
             android:layout_width="match_parent"
@@ -244,7 +184,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="AI GHOST LEARNING &amp; SHIELD"
+                    android:text="GHOST GUARDIAN SHIELD"
                     android:textColor="#00E5FF"
                     android:textSize="17sp"
                     android:textStyle="bold" />
@@ -254,26 +194,12 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="Identify ghost touch factors, calibrate glitch zones, and activate continuous background shield overlay."
+                    android:text="Instant 45ms rapid spam filter • Mechanical impulse &amp; flesh area verification • Lock-screen protection • Pure S Pen EMR."
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:lineSpacingExtra="2dp" />
 
-                <!-- S23 Ultra AI Co-Pilot Hero Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnLaunchCoPilot"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="54dp"
-                    android:layout_marginTop="12dp"
-                    android:text="🧠 AI CO-PILOT: TEACH AI BRAIN (S23 ULTRA)"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="#2563EB"
-                    android:textColor="#FFFFFF"
-                    app:cornerRadius="12dp" />
-
-                <!-- AI Model Calibration Badges -->
+                <!-- AI Status Badges -->
                 <LinearLayout
                     android:id="@+id/panelAiStatus"
                     android:layout_width="match_parent"
@@ -287,8 +213,8 @@
                         android:id="@+id/tvAiFingerStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🟢 Finger Profile: Not Calibrated"
-                        android:textColor="@color/text_secondary"
+                        android:text="⚡ 45ms Spam Filter: ACTIVE (Touches &lt; 45ms dropped)"
+                        android:textColor="@color/valid_green"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -297,8 +223,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="🔴 Ghost Spectrum: Not Calibrated"
-                        android:textColor="@color/text_secondary"
+                        android:text="🔬 Physical Gate: Impulse shockwave &amp; flesh area verified"
+                        android:textColor="@color/accent_cyan"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -307,50 +233,25 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="🖊️ Dedicated S Pen: OFF"
+                        android:text="🖊️ S Pen Exclusive: Notification toggle enabled"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
+                <!-- Shield Toggle Button -->
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnGhostIdentify"
+                    android:id="@+id/btnToggleHotspotShield"
                     style="@style/Widget.MaterialComponents.Button"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:layout_marginTop="14dp"
-                    android:text="1. GHOST IDENTIFY (LEARN FINGERPRINT)"
+                    android:text="🛡️ GHOST TOUCH SHIELD: OFF"
+                    android:textColor="#FFFFFF"
                     android:textSize="13sp"
                     android:textStyle="bold"
                     app:backgroundTint="#FF5252"
-                    android:textColor="#FFFFFF"
                     app:cornerRadius="12dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnAutoCalibrateScreen"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="50dp"
-                    android:layout_marginTop="8dp"
-                    android:text="2. AUTO-CALIBRATION (ZONE MAPPER)"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="#00E5FF"
-                    android:textColor="#070A11"
-                    app:cornerRadius="12dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnToggleHotspotShield"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="8dp"
-                    android:text="Hotspot Shield: OFF"
-                    android:textColor="#FF5252"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    app:cornerRadius="12dp"
-                    app:strokeColor="#FF5252" />
 
                 <!-- Dedicated S Pen Mode Button -->
                 <com.google.android.material.button.MaterialButton
@@ -379,6 +280,20 @@
                     android:textStyle="bold"
                     app:cornerRadius="12dp"
                     app:strokeColor="@color/accent_cyan" />
+
+                <!-- 1-Tap Reset Brain & Ghost Data Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnResetLearnedData"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="🔄 RESET ALL GHOST DATA (CLEAN DEFAULTS)"
+                    android:textColor="#FFB74D"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="#FFB74D" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

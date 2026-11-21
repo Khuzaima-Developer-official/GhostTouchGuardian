@@ -11,8 +11,8 @@ enum class GhostTouchProfile(
         id = "balanced",
         title = "Balanced",
         subtitle = "Optimal balance for daily phone usage",
-        maxDwellMs = 35,
-        echoWindowMs = 55L
+        maxDwellMs = 45,
+        echoWindowMs = 60L
     ),
 
     MICRO_SPARKS(

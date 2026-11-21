@@ -83,6 +83,19 @@ class GuardianPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_FINGER_SHIELD_MODE, true)
         set(value) = prefs.edit().putBoolean(KEY_FINGER_SHIELD_MODE, value).apply()
 
+    fun resetAllLearnedProfiles() {
+        prefs.edit()
+            .remove(KEY_HUMAN_FINGER_PROFILE)
+            .remove(KEY_GHOST_GLITCH_PROFILE)
+            .remove(KEY_GHOST_BRAIN_ENGINE)
+            .remove(KEY_GHOST_FINGERPRINT)
+            .remove(KEY_FINGERPRINT_ENABLED)
+            .remove(KEY_SAVED_HOTSPOTS)
+            .remove(KEY_CALIBRATED_AVG_PERIOD)
+            .remove(KEY_CALIBRATED_VARIANCE)
+            .apply()
+    }
+
     companion object {
         private const val PREF_NAME = "ghost_touch_guardian_prefs"
         private const val KEY_PROFILE_ID = "pref_profile_id"

@@ -55,6 +55,16 @@ class CompactTouchRepository(private val context: Context) {
         saveBrain(brain)
     }
 
+    fun resetBrain() {
+        synchronized(lock) {
+            try {
+                if (brainFile.exists()) {
+                    brainFile.delete()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     companion object {
         private const val BRAIN_FILENAME = "master_touch_brain_v3.json"
     }
