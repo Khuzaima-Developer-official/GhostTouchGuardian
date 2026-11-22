@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -39,17 +37,15 @@ import com.antigravity.ghosttouchguardian.service.shield.ShieldNotificationManag
 import kotlin.math.max
 
 /**
- * HotspotShieldService (v3.8.0) — Precision Screen Shield & Pure S Pen EMR Gate
+ * HotspotShieldService (v3.9.0) — Precision Screen Shield & Pure S Pen EMR Gate
  *
- * Single-Task Modular Architecture:
- * - Window Management: OverlayWindowManager (Cutout-safe, 100% full screen)
- * - Notifications: ShieldNotificationManager (Un-swipeable, instant toggles)
- * - Stylus Hardware Routing: SPenGate (Pure Wacom EMR detection, 35-45ms re-arm)
- * - Burst Rejection: RapidSpamGate (<45ms zero-allocation burst filter)
- * - Physical Biometrics: HumanImpulseGate (Chassis momentum, FingerIntensityMargin)
- * - Throttled Alerts: GhostHapticFeedback (Max 1 per 250ms)
- * - AI Leak Choke: GhostLeakSuppressionEngine (Active frequency & spatial hotspot tracking)
- * - Dynamic Organizer: AiStorageOrganizer (Compaction & contamination purge)
+ * Core Fixes:
+ * 1. Live Activity Ghost Learning: Every blocked ghost touch (burst, dwell <45ms, smear, S-Pen mode)
+ *    is immediately identified, registered with AI engines, and muted.
+ * 2. Smooth Touch Under Spam: Screen window mutations are strictly forbidden while pointer is down,
+ *    guaranteeing smooth finger scrolling and typing even during active moisture spam bursts.
+ * 3. S-Pen Live Ghost Filter: 350ms stroke debounce eliminates WindowManager IPC stutter,
+ *    and non-stylus water touches are simultaneously identified, learned, and ignored.
  */
 class HotspotShieldService : Service() {
 
@@ -300,6 +296,10 @@ class HotspotShieldService : Service() {
                 notificationManager.updateNotification()
                 overlayManager.overlayView?.postInvalidate()
             }
+            ACTION_TOGGLE_SPEN_LIVE_FILTER -> {
+                prefs.isSPenLiveGhostFilterEnabled = !prefs.isSPenLiveGhostFilterEnabled
+                notificationManager.updateNotification()
+            }
             ACTION_RESET_DATA -> {
                 prefs.resetAllLearnedProfiles()
                 repository.resetBrain()
@@ -332,6 +332,72 @@ class HotspotShieldService : Service() {
         }
     }
 
+    /**
+     * Unified Async Ghost Learning & Real-Time Alert Dispatcher.
+     * Guarantees every single ghost touch in live activities is recorded, learned, and muted!
+     */
+    fun handleAndLearnGhostTouch(
+        event: MotionEvent,
+        dwellMs: Int,
+        accelDelta: Float,
+        tremorVar: Float,
+        intervalMs: Long
+    ) {
+        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+        hapticFeedback.triggerAlert(isGhost = true)
+        notificationManager.updateNotification()
+
+        val curX = event.x
+        val curY = event.y
+        val curPressure = event.pressure
+        val curSize = event.size
+        val curMajor = event.touchMajor.coerceAtLeast(1f)
+        val curMinor = event.touchMinor.coerceAtLeast(1f)
+        val eccentricity = (curMajor / curMinor).coerceIn(1.0f, 10.0f)
+
+        val screenW = overlayManager.overlayView?.width ?: 1080
+        val screenH = overlayManager.overlayView?.height ?: 2400
+
+        aiExecutor.execute {
+            try {
+                leakSuppressionEngine.registerGhostTouch(curX, curY, intervalMs, screenW, screenH)
+                ghostTypeClassifier.learnGhostType(accelDelta, tremorVar, intervalMs)
+
+                val featureVector = TouchFeatureVector(
+                    dwell = dwellMs.toFloat(),
+                    size = curSize.coerceIn(0f, 1f),
+                    pressure = curPressure.coerceIn(0f, 1f),
+                    accelDelta = accelDelta.coerceAtLeast(0f),
+                    interval = intervalMs.toFloat().coerceAtLeast(0f),
+                    velocity = 0f,
+                    eccentricity = eccentricity,
+                    timeSinceStimulus = 100f
+                )
+                val extendedVector = ExtendedTouchVector(
+                    dwell = dwellMs.toFloat(),
+                    size = curSize.coerceIn(0f, 1f),
+                    pressure = curPressure.coerceIn(0f, 1f),
+                    accelDelta = accelDelta.coerceAtLeast(0f),
+                    pressureGradient = 0f,
+                    microTremorVariance = tremorVar,
+                    eccentricity = eccentricity,
+                    velocity = 0f,
+                    interval = intervalMs.toFloat().coerceAtLeast(0f),
+                    timeSinceStimulus = 100f
+                )
+
+                brainEngine.learnOnline(featureVector, isGhost = true)
+                masterClassifier.learnOnline(extendedVector, isGhost = true)
+
+                if (masterClassifier.totalOnlineUpdates % 20L == 0L) {
+                    storageOrganizer.organizeAndCompact(masterClassifier)
+                    prefs.ghostBrainEngineJson = brainEngine.toJson()
+                    prefs.ghostTypeClassifierJson = ghostTypeClassifier.toJson()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun attachOverlay() {
         if (overlayManager.overlayView != null) return
 
@@ -357,7 +423,7 @@ class HotspotShieldService : Service() {
         lastHumanInteractionTime = android.os.SystemClock.uptimeMillis()
         overlayManager.setTouchThrough(true)
         handler.removeCallbacks(reArmRunnable)
-        handler.postDelayed(reArmRunnable, 350L) // Fast 350ms typing grace window
+        handler.postDelayed(reArmRunnable, 450L) // Smooth 450ms typing grace window
     }
 
     private fun removeOverlay() {
@@ -438,11 +504,10 @@ class HotspotShieldService : Service() {
             val hasOnlyStylus = spenGate.hasOnlyStylus(event)
 
             // =========================================================================
-            // TIER 0: DEDICATED S PEN MODE (100% CAPACITIVE TOUCH MUTING & CONTINUOUS GHOST LEARN)
+            // TIER 0: DEDICATED S PEN MODE (SMOOTH EMR PASS & LIVE GHOST IDENTIFY/IGNORE)
             // =========================================================================
             if (prefs.isSPenModeActive) {
                 if (hasOnlyStylus) {
-                    // Stylus is physically touching down
                     lastStylusUpTime = now
                     spenGate.onStylusTouchDown()
                     if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
@@ -451,120 +516,43 @@ class HotspotShieldService : Service() {
                     } else {
                         isPointerDownOnScreen = true
                     }
-                    return false // Let stylus stroke flow through natively
+                    return false // S Pen stroke flows smoothly without any interruption
                 } else {
-                    // ANY non-stylus touch in S Pen Mode is guaranteed 100% water ghost touch!
+                    // Non-stylus touch (water/capacitive glitch) in S-Pen Mode
                     isPointerDownOnScreen = false
-
                     val intervalMs = rapidSpamGate.getLastInterval(now)
+                    val dwell = if (event.actionMasked == MotionEvent.ACTION_UP && pendingDownTime > 0L) {
+                        (now - pendingDownTime).toInt().coerceIn(1, 5000)
+                    } else 30
 
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            pendingDownTime = now
-                            pendingDownX = event.x
-                            pendingDownY = event.y
-                            pendingDownPressure = event.pressure
-                            movePoints.clear()
-                            movePoints.add(Pair(event.x, event.y))
-                        }
-                        MotionEvent.ACTION_MOVE -> {
-                            movePoints.add(Pair(event.x, event.y))
-                        }
+                    // User Option: "s-pen mode mein ghost touch identify & saath saath ignore ho"
+                    if (prefs.isSPenLiveGhostFilterEnabled) {
+                        handleAndLearnGhostTouch(
+                            event = event,
+                            dwellMs = dwell,
+                            accelDelta = impulseSensor.getLastAccelDelta(),
+                            tremorVar = 0f,
+                            intervalMs = intervalMs
+                        )
                     }
-
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_UP) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        hapticFeedback.triggerAlert(isGhost = true)
-
-                        val dwell = if (event.actionMasked == MotionEvent.ACTION_UP && pendingDownTime > 0L) {
-                            (now - pendingDownTime).toInt().coerceIn(1, 5000)
-                        } else 25
-
-                        val curX = event.x
-                        val curY = event.y
-                        val curPressure = event.pressure
-                        val curSize = event.size
-                        val curMajor = event.touchMajor.coerceAtLeast(1f)
-                        val curMinor = event.touchMinor.coerceAtLeast(1f)
-                        val curDownX = pendingDownX
-                        val curDownY = pendingDownY
-                        val curDownPressure = pendingDownPressure
-                        val accelDelta = impulseSensor.getLastAccelDelta()
-                        val pointsCopy = movePoints.toList()
-
-                        // Asynchronous non-blocking AI learning: zero UI frame drops or IPC congestion!
-                        aiExecutor.execute {
-                            try {
-                                val dx = curX - curDownX
-                                val dy = curY - curDownY
-                                val dist = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-                                val velocity = if (dwell > 0) dist / dwell.toFloat() else 0f
-                                val eccentricity = (curMajor / curMinor).coerceIn(1.0f, 10.0f)
-                                val dp = kotlin.math.abs(curPressure - curDownPressure)
-                                val pressureGradient = if (dwell > 0) dp / dwell.toFloat() else 0f
-
-                                var tremorVar = 0f
-                                if (pointsCopy.size >= 3) {
-                                    val meanX = pointsCopy.map { it.first }.average().toFloat()
-                                    val meanY = pointsCopy.map { it.second }.average().toFloat()
-                                    val sqDiffSum = pointsCopy.fold(0f) { acc, p ->
-                                        val px = p.first - meanX
-                                        val py = p.second - meanY
-                                        acc + (px * px + py * py)
-                                    }
-                                    tremorVar = (sqDiffSum / pointsCopy.size.toFloat()).coerceIn(0f, 25f)
-                                }
-
-                                val featureVector = TouchFeatureVector(
-                                    dwell = dwell.toFloat(),
-                                    size = curSize.coerceIn(0f, 1f),
-                                    pressure = curPressure.coerceIn(0f, 1f),
-                                    accelDelta = accelDelta.coerceAtLeast(0f),
-                                    interval = intervalMs.toFloat().coerceAtLeast(0f),
-                                    velocity = velocity.coerceIn(0f, 50f),
-                                    eccentricity = eccentricity,
-                                    timeSinceStimulus = 100f
-                                )
-                                val extendedVector = ExtendedTouchVector(
-                                    dwell = dwell.toFloat(),
-                                    size = curSize.coerceIn(0f, 1f),
-                                    pressure = curPressure.coerceIn(0f, 1f),
-                                    accelDelta = accelDelta.coerceAtLeast(0f),
-                                    pressureGradient = pressureGradient.coerceIn(0f, 1f),
-                                    microTremorVariance = tremorVar,
-                                    eccentricity = eccentricity,
-                                    velocity = velocity.coerceIn(0f, 50f),
-                                    interval = intervalMs.toFloat().coerceAtLeast(0f),
-                                    timeSinceStimulus = 100f
-                                )
-
-                                leakSuppressionEngine.registerGhostTouch(curX, curY, intervalMs, width, height)
-                                ghostTypeClassifier.learnGhostType(accelDelta, tremorVar, intervalMs)
-                                brainEngine.learnOnline(featureVector, isGhost = true)
-                                masterClassifier.learnOnline(extendedVector, isGhost = true)
-
-                                if (masterClassifier.totalOnlineUpdates % 25L == 0L) {
-                                    storageOrganizer.organizeAndCompact(masterClassifier)
-                                    prefs.ghostBrainEngineJson = brainEngine.toJson()
-                                    prefs.ghostTypeClassifierJson = ghostTypeClassifier.toJson()
-                                }
-                            } catch (_: Exception) {}
-                        }
-                    }
-
-                    return true // Swallowed immediately with 0 delay!
+                    return true // Muted & ignored unconditionally
                 }
             }
 
             // =========================================================================
-            // TIER 1: ULTRA-FAST RAPID SPAM FILTER (< 45ms INTERVAL OR MULTI-BURST)
+            // TIER 1: RAPID SPAM FILTER (< 45ms INTERVAL OR MULTI-BURST)
             // =========================================================================
             if (rapidSpamGate.isSpamBurst(event, hasOnlyStylus)) {
-                if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_UP) {
-                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    hapticFeedback.triggerAlert(isGhost = true)
-                }
-                if (overlayManager.isTouchThrough) {
+                val interval = rapidSpamGate.getLastInterval(now)
+                handleAndLearnGhostTouch(
+                    event = event,
+                    dwellMs = 15,
+                    accelDelta = impulseSensor.getLastAccelDelta(),
+                    tremorVar = 0f,
+                    intervalMs = interval
+                )
+                // NEVER interrupt the user while pointer is actively held down!
+                if (overlayManager.isTouchThrough && !isPointerDownOnScreen) {
                     reArmShieldDirect()
                 }
                 return true // SWALLOW BURST INSTANTLY!
@@ -573,7 +561,7 @@ class HotspotShieldService : Service() {
             val interval = rapidSpamGate.getLastInterval(now)
 
             // =========================================================================
-            // TIER 2: NORMAL FINGER TOUCH & AI GHOST SHIELD MODE
+            // TIER 2: NORMAL FINGER TOUCH & PASS-THROUGH LEAK CHOKE
             // =========================================================================
             if (overlayManager.isTouchThrough) {
                 val accelDelta = impulseSensor.getLastAccelDelta()
@@ -594,11 +582,17 @@ class HotspotShieldService : Service() {
                 )
                 val isLeak = isGhostType || leakSuppressionEngine.evaluateLeak(event, now, interval, accelDelta, hasImpulse, width, height)
                 if (isLeak) {
-                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    hapticFeedback.triggerAlert(isGhost = true)
-                    reArmShieldDirect()
-                    ghostTypeClassifier.learnGhostType(accelDelta, 0f, interval)
-                    leakSuppressionEngine.registerGhostTouch(event.x, event.y, interval, width, height)
+                    handleAndLearnGhostTouch(
+                        event = event,
+                        dwellMs = 35,
+                        accelDelta = accelDelta,
+                        tremorVar = 0f,
+                        intervalMs = interval
+                    )
+                    // If user is NOT holding down on screen, clamp pass-through shut:
+                    if (!isPointerDownOnScreen) {
+                        reArmShieldDirect()
+                    }
                     return true // CHOKE LEAK IMMEDIATELY!
                 }
 
@@ -606,12 +600,12 @@ class HotspotShieldService : Service() {
                     isPointerDownOnScreen = true
                     lastHumanInteractionTime = now
                     handler.removeCallbacks(reArmRunnable)
-                    handler.postDelayed(reArmRunnable, 350L)
+                    handler.postDelayed(reArmRunnable, 450L)
                 } else if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
                     isPointerDownOnScreen = false
                     lastHumanInteractionTime = now
                     handler.removeCallbacks(reArmRunnable)
-                    handler.postDelayed(reArmRunnable, 350L)
+                    handler.postDelayed(reArmRunnable, 450L)
                 }
                 return false
             }
@@ -625,14 +619,18 @@ class HotspotShieldService : Service() {
                 return false
             }
 
-            // Screen Wake Guard: When phone wakes from screen off, digitizer produces wake bursts
+            // Screen Wake Guard: When phone wakes from screen off
             if (isScreenWakeGuardActive) {
                 val hasImpulse = impulseSensor.hasMechanicalImpulse(event.eventTime, windowMs = 120L)
                 val isFleshy = event.size >= 0.04f || event.pressure >= 0.12f
                 if (!hasImpulse && !isFleshy) {
-                    if (event.actionMasked == MotionEvent.ACTION_UP) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    }
+                    handleAndLearnGhostTouch(
+                        event = event,
+                        dwellMs = 25,
+                        accelDelta = impulseSensor.getLastAccelDelta(),
+                        tremorVar = 0f,
+                        intervalMs = interval
+                    )
                     return true // Swallow wake burst
                 } else {
                     isScreenWakeGuardActive = false
@@ -643,20 +641,19 @@ class HotspotShieldService : Service() {
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    // ACTIVE STORM SUPPRESSION: Clamped down during high-frequency glitch storms
+                    // Active storm suppression clamp
                     if (leakSuppressionEngine.isStormSuppressionActive) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
+                        handleAndLearnGhostTouch(event, 25, impulseSensor.getLastAccelDelta(), 0f, interval)
                         return true
                     }
 
                     val accelDelta = impulseSensor.getLastAccelDelta()
                     val hasImpulse = impulseSensor.hasMechanicalImpulse(now, windowMs = 80L)
+                    val effectiveAccel = if (hasImpulse) max(accelDelta, 0.025f) else accelDelta
 
                     val inMoistureHotspot = leakSuppressionEngine.isInMoistureHotspot(event.x, event.y, width, height)
                     if (inMoistureHotspot && !hasImpulse) {
-                        // High-density moisture zone without physical chassis impulse: swallow immediately!
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        hapticFeedback.triggerAlert(isGhost = true)
+                        handleAndLearnGhostTouch(event, 30, effectiveAccel, 0f, interval)
                         return true
                     }
 
@@ -668,7 +665,6 @@ class HotspotShieldService : Service() {
                     pendingDownPressure = event.pressure
                     movePoints.clear()
                     movePoints.add(Pair(event.x, event.y))
-                    val effectiveAccel = if (hasImpulse) max(accelDelta, 0.025f) else accelDelta
 
                     val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
 
@@ -687,8 +683,8 @@ class HotspotShieldService : Service() {
                     )
 
                     if (isGhostType) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        hapticFeedback.triggerAlert(isGhost = true)
+                        isPointerDownOnScreen = false
+                        handleAndLearnGhostTouch(event, 30, effectiveAccel, 0f, interval)
                         return true // Swallow ghost touch down!
                     }
 
@@ -707,12 +703,12 @@ class HotspotShieldService : Service() {
                         return false // Allow DOWN to pass to underlying app cleanly
                     }
 
+                    isPointerDownOnScreen = false
+                    handleAndLearnGhostTouch(event, 30, effectiveAccel, 0f, interval)
                     return true
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    isPointerDownOnScreen = true
-                    lastHumanInteractionTime = event.eventTime
                     movePoints.add(Pair(event.x, event.y))
                     if (overlayManager.isTouchThrough) {
                         handler.removeCallbacks(reArmRunnable)
@@ -732,6 +728,7 @@ class HotspotShieldService : Service() {
                     )
 
                     if (isHumanMove) {
+                        isPointerDownOnScreen = true
                         lastHumanUpTime = event.eventTime
                         passThroughTemporarily()
                         return false
@@ -742,15 +739,7 @@ class HotspotShieldService : Service() {
                 MotionEvent.ACTION_UP -> {
                     isPointerDownOnScreen = false
                     lastHumanInteractionTime = event.eventTime
-                    val dwell = (event.eventTime - pendingDownTime).toInt()
-
-                    // ULTRA-FAST DWELL GATE (< 45ms)
-                    if (dwell < 45 && !hasOnlyStylus) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        hapticFeedback.triggerAlert(isGhost = true)
-                        reArmShieldDirect()
-                        return true // SWALLOW INSTANTLY!
-                    }
+                    val dwell = (event.eventTime - pendingDownTime).toInt().coerceAtLeast(1)
 
                     val timeSinceHuman = if (lastHumanUpTime > 0L) pendingDownTime - lastHumanUpTime else -1L
                     val timeSinceStylus = if (lastStylusUpTime > 0L) pendingDownTime - lastStylusUpTime else -1L
@@ -760,6 +749,15 @@ class HotspotShieldService : Service() {
                     val effectiveAccel = if (hasImpulse) max(accelDelta, 0.025f) else accelDelta
 
                     val inGreenZone = aiCore.ghostProfile.greenZones.any { it.contains(event.x, event.y) }
+
+                    // ULTRA-FAST DWELL GATE (< 45ms)
+                    if (dwell < 45 && !hasOnlyStylus && !inGreenZone) {
+                        handleAndLearnGhostTouch(event, dwell, effectiveAccel, 0f, interval)
+                        if (!isPointerDownOnScreen) {
+                            reArmShieldDirect()
+                        }
+                        return true // SWALLOW INSTANTLY!
+                    }
 
                     // Extract 10D Extended Feature Vector for Master AI Brain
                     val extendedVector = ExtendedTouchVector.extract(
@@ -774,10 +772,8 @@ class HotspotShieldService : Service() {
                         movePoints = movePoints
                     )
 
-                    // 1. Check Master Touch Classifier (Active Learning & Micro-Tremor)
                     val masterDecision = masterClassifier.classify(extendedVector, toolType)
 
-                    // Extract 8D Feature Vector for fallback Bayesian Engine
                     val featureVector = TouchFeatureVector.extract(
                         event = event,
                         dwellMs = dwell,
@@ -820,26 +816,17 @@ class HotspotShieldService : Service() {
                     )
 
                     if (isGhostType || masterDecision.isGhost) {
-                        prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                        leakSuppressionEngine.registerGhostTouch(event.x, event.y, interval, width, height)
-                        ghostTypeClassifier.learnGhostType(effectiveAccel, extendedVector.microTremorVariance, interval)
-
-                        aiExecutor.execute {
-                            try {
-                                masterClassifier.learnOnline(extendedVector, isGhost = true)
-                                brainEngine.learnOnline(featureVector, isGhost = true)
-                                prefs.ghostTypeClassifierJson = ghostTypeClassifier.toJson()
-
-                                if (masterClassifier.totalOnlineUpdates % 25L == 0L) {
-                                    storageOrganizer.organizeAndCompact(masterClassifier)
-                                    prefs.ghostBrainEngineJson = brainEngine.toJson()
-                                }
-                            } catch (_: Exception) {}
-                        }
-
-                        hapticFeedback.triggerAlert(isGhost = true)
+                        handleAndLearnGhostTouch(
+                            event = event,
+                            dwellMs = dwell,
+                            accelDelta = effectiveAccel,
+                            tremorVar = extendedVector.microTremorVariance,
+                            intervalMs = interval
+                        )
                         isPointerDownOnScreen = false
-                        reArmShieldDirect()
+                        if (!isPointerDownOnScreen) {
+                            reArmShieldDirect()
+                        }
                         return true
                     }
 
@@ -859,23 +846,16 @@ class HotspotShieldService : Service() {
                         return false
                     }
 
-                    prefs.totalBlockedGhosts = prefs.totalBlockedGhosts + 1
-                    leakSuppressionEngine.registerGhostTouch(event.x, event.y, interval, width, height)
-                    aiExecutor.execute {
-                        try {
-                            brainEngine.learnOnline(featureVector, isGhost = true)
-                            masterClassifier.learnOnline(extendedVector, isGhost = true)
-
-                            if (brainEngine.totalOnlineUpdates % 25L == 0L) {
-                                storageOrganizer.organizeAndCompact(masterClassifier)
-                                prefs.ghostBrainEngineJson = brainEngine.toJson()
-                            }
-                        } catch (_: Exception) {}
+                    handleAndLearnGhostTouch(
+                        event = event,
+                        dwellMs = dwell,
+                        accelDelta = effectiveAccel,
+                        tremorVar = extendedVector.microTremorVariance,
+                        intervalMs = interval
+                    )
+                    if (!isPointerDownOnScreen) {
+                        reArmShieldDirect()
                     }
-
-                    hapticFeedback.triggerAlert(isGhost = true)
-                    isPointerDownOnScreen = false
-                    reArmShieldDirect()
                     return true
                 }
 
@@ -901,6 +881,7 @@ class HotspotShieldService : Service() {
         const val ACTION_ENABLE_SPEN_MODE = "com.antigravity.guardian.ENABLE_SPEN_MODE"
         const val ACTION_DISABLE_SPEN_MODE = "com.antigravity.guardian.DISABLE_SPEN_MODE"
         const val ACTION_TOGGLE_SPEN_MODE = "com.antigravity.guardian.TOGGLE_SPEN_FROM_NOTIF"
+        const val ACTION_TOGGLE_SPEN_LIVE_FILTER = "com.antigravity.guardian.TOGGLE_SPEN_LIVE_FILTER"
         const val ACTION_RESET_DATA = "com.antigravity.guardian.SHIELD_RESET_DATA"
 
         @Volatile

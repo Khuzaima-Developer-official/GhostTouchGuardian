@@ -267,6 +267,20 @@
                     app:cornerRadius="12dp"
                     app:strokeColor="#B388FF" />
 
+                <!-- S Pen Live Ghost Filter (Identify & Ignore) Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnToggleSPenLiveFilter"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="🖊️ S-Pen Live Ghost Filter: ON"
+                    android:textColor="#80D8FF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="#80D8FF" />
+
                 <!-- 24/7 Samsung Unrestricted Background Protection Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnBatteryOptimization"

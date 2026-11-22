@@ -79,6 +79,10 @@ class GuardianPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_SPEN_MODE_ACTIVE, false)
         set(value) = prefs.edit().putBoolean(KEY_SPEN_MODE_ACTIVE, value).apply()
 
+    var isSPenLiveGhostFilterEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SPEN_LIVE_GHOST_FILTER, true)
+        set(value) = prefs.edit().putBoolean(KEY_SPEN_LIVE_GHOST_FILTER, value).apply()
+
     var isFingerShieldModeActive: Boolean
         get() = prefs.getBoolean(KEY_FINGER_SHIELD_MODE, true)
         set(value) = prefs.edit().putBoolean(KEY_FINGER_SHIELD_MODE, value).apply()
@@ -123,6 +127,7 @@ class GuardianPreferences(context: Context) {
         private const val KEY_GHOST_GLITCH_PROFILE = "pref_ghost_glitch_profile"
         private const val KEY_GHOST_BRAIN_ENGINE = "pref_ghost_brain_engine"
         private const val KEY_SPEN_MODE_ACTIVE = "pref_spen_mode_active"
+        private const val KEY_SPEN_LIVE_GHOST_FILTER = "pref_spen_live_ghost_filter"
         private const val KEY_FINGER_SHIELD_MODE = "pref_finger_shield_mode"
         private const val KEY_FINGER_MARGIN = "pref_finger_margin"
         private const val KEY_GHOST_TYPE_CLASSIFIER = "pref_ghost_type_classifier"

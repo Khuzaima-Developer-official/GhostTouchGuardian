@@ -69,8 +69,9 @@ class ShieldNotificationManager(
         val blocked = prefs.totalBlockedGhosts
 
         if (prefs.isSPenModeActive) {
-            title = "🖊️ S Pen Exclusive: ON"
-            text = "$blocked Glitches Muted • Only S Pen Active"
+            title = "🖊️ S Pen Mode: ON"
+            val liveFilterStatus = if (prefs.isSPenLiveGhostFilterEnabled) "Live Ignore: ON" else "Live Ignore: OFF"
+            text = "$blocked Glitches Blocked • $liveFilterStatus"
             val disableSPenIntent = Intent(context, HotspotShieldService::class.java).apply {
                 action = HotspotShieldService.ACTION_DISABLE_SPEN_MODE
             }
@@ -81,7 +82,7 @@ class ShieldNotificationManager(
             )
         } else {
             title = "🛡️ Ghost Touch Shield: ON"
-            text = "45ms Spam Filter Active • $blocked Glitches Swallowed"
+            text = "Smooth Touch Active • $blocked Glitches Swallowed"
             val enableSPenIntent = Intent(context, HotspotShieldService::class.java).apply {
                 action = HotspotShieldService.ACTION_ENABLE_SPEN_MODE
             }

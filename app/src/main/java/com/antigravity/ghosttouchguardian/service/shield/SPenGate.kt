@@ -5,12 +5,13 @@ import android.os.Looper
 import android.view.MotionEvent
 
 /**
- * SPenGate — Single-Task Component for S-Pen Wacom EMR Routing & Timing.
+ * SPenGate — Single-Task Component for S-Pen Wacom EMR Routing & Smooth Timing.
  *
  * Responsibilities:
  * - Accurately detects whether an event contains purely S-Pen stylus input across all pointers.
  * - Handles stylus hover enter, hover move, and hover exit.
- * - Maintains ultra-tight debounce timing (35ms - 45ms) so the shield locks down immediately when pen lifts.
+ * - Enforces zero WindowManager mutations during active handwriting strokes.
+ * - Maintains smooth 350ms debounce timing between letters so strokes never clip or freeze.
  */
 class SPenGate(
     private val onEnablePassThrough: () -> Unit,
@@ -46,13 +47,14 @@ class SPenGate(
             MotionEvent.ACTION_HOVER_MOVE -> {
                 handler.removeCallbacks(penExitRunnable)
                 onEnablePassThrough()
-                handler.postDelayed(penExitRunnable, 45L)
+                // Smooth 350ms debounce: prevents WindowManager IPC stalls during hover movement
+                handler.postDelayed(penExitRunnable, 350L)
                 return false
             }
             MotionEvent.ACTION_HOVER_EXIT -> {
                 if (!isPointerDownOnScreen) {
                     handler.removeCallbacks(penExitRunnable)
-                    handler.postDelayed(penExitRunnable, 35L)
+                    handler.postDelayed(penExitRunnable, 250L)
                 }
                 return false
             }
@@ -62,19 +64,20 @@ class SPenGate(
 
     /**
      * Called when stylus is actively touching down on screen.
+     * Keeps pass-through solidly open with ZERO premature re-arm while pen is touching.
      */
     fun onStylusTouchDown() {
         handler.removeCallbacks(penExitRunnable)
         onEnablePassThrough()
-        handler.postDelayed(penExitRunnable, 45L)
     }
 
     /**
      * Called when stylus lifts up from the screen.
+     * Clean 350ms window allows natural gaps between letters without mutating window flags.
      */
     fun onStylusTouchUp() {
         handler.removeCallbacks(penExitRunnable)
-        handler.postDelayed(penExitRunnable, 35L)
+        handler.postDelayed(penExitRunnable, 350L)
     }
 
     fun cancelPendingReArm() {

@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity() {
         updateDashboard()
         updateShieldButton()
         updateSPenButton()
+        updateSPenLiveFilterButton()
         updateBatteryOptimizationButton()
         updateAiStatusBadges()
         renderActiveProfile(prefs.currentProfile)
@@ -304,6 +305,7 @@ class MainActivity : AppCompatActivity() {
                 startService(spenIntent)
             }
             updateSPenButton()
+            updateSPenLiveFilterButton()
             updateShieldButton()
             updateAiStatusBadges()
             val status = if (prefs.isSPenModeActive)
@@ -311,6 +313,22 @@ class MainActivity : AppCompatActivity() {
             else
                 "🖐️ S Pen Mode: OFF (Finger Touch Restored)"
             Toast.makeText(this, status, Toast.LENGTH_SHORT).show()
+        }
+
+        // S Pen Live Ghost Filter (Identify & Ignore) toggle
+        updateSPenLiveFilterButton()
+        binding.btnToggleSPenLiveFilter.setOnClickListener {
+            prefs.isSPenLiveGhostFilterEnabled = !prefs.isSPenLiveGhostFilterEnabled
+            updateSPenLiveFilterButton()
+            val toggleIntent = Intent(this, com.antigravity.ghosttouchguardian.service.HotspotShieldService::class.java).apply {
+                action = com.antigravity.ghosttouchguardian.service.HotspotShieldService.ACTION_TOGGLE_SPEN_LIVE_FILTER
+            }
+            startService(toggleIntent)
+            val msg = if (prefs.isSPenLiveGhostFilterEnabled)
+                "🖊️ S-Pen Live Ghost Filter: ON (Auto-Identify & Ignore)"
+            else
+                "⚠️ S-Pen Live Ghost Filter: OFF"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
         // 1-Tap Reset All Learned Data
@@ -395,6 +413,18 @@ class MainActivity : AppCompatActivity() {
             binding.btnToggleSPenMode.text = "Dedicated S Pen Mode: OFF (Tap to Activate)"
             binding.btnToggleSPenMode.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
             binding.btnToggleSPenMode.strokeColor = ContextCompat.getColorStateList(this, R.color.card_border)
+        }
+    }
+
+    private fun updateSPenLiveFilterButton() {
+        if (prefs.isSPenLiveGhostFilterEnabled) {
+            binding.btnToggleSPenLiveFilter.text = "🖊️ S-Pen Live Ghost Filter: ON (Auto-Identify & Ignore)"
+            binding.btnToggleSPenLiveFilter.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+            binding.btnToggleSPenLiveFilter.strokeColor = ContextCompat.getColorStateList(this, R.color.accent_cyan)
+        } else {
+            binding.btnToggleSPenLiveFilter.text = "🖊️ S-Pen Live Ghost Filter: OFF"
+            binding.btnToggleSPenLiveFilter.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.btnToggleSPenLiveFilter.strokeColor = ContextCompat.getColorStateList(this, R.color.card_border)
         }
     }
 
