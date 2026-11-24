@@ -3,76 +3,75 @@ package com.antigravity.ghosttouchguardian
 import android.view.MotionEvent
 import kotlin.math.sqrt
 
-// ─── Touch context: everything computed once from one gesture ─────────────
+// ─── Touch context: everything extracted once per gesture ─────────────────
 data class Ctx(
-    val dw:  Int,            // dwell ms
-    val hs:  Int,            // historySize (batched samples in this event)
-    val pts: List<Pair<Float,Float>>, // ACTION_MOVE positions (x,y)
-    val ecc: Float,          // touchMajor/touchMinor (eccentricity)
-    val acc: Float,          // peak accel delta in ±AW window
-    val iv:  Long,           // interval since previous touch ms
-    val px:  Float,          // last x
-    val py:  Float,          // last y
-    val prs: Float,          // pressure at UP
-    val p0:  Float,          // pressure at DOWN
-    val pMx: Float,          // max pressure seen during gesture
-    val hpv: Float,          // historical pressure variance (batch samples)
-    val sz:  Float,          // contact size at UP
-    val tmj: Float,          // touchMajor at UP
-    val tmn: Float,          // touchMinor at UP
-    val ori: Float,          // orientation axis value
-    val tsDn: Long,          // eventTime of DOWN
-    val tsSty: Long          // time since last stylus up (ms), -1 if never
+    val dw:   Int,                        // dwell ms (DOWN→UP)
+    val pts:  List<Pair<Float,Float>>,    // all (x,y) samples collected during gesture
+    val ecc:  Float,                      // touchMajor/touchMinor at UP
+    val acc:  Float,                      // peak accel in [downTime-AW .. upTime+AW]
+    val iv:   Long,                       // ms since previous gesture ended
+    val px:   Float,                      // x at UP
+    val py:   Float,                      // y at UP
+    val prs:  Float,                      // pressure at UP
+    val p0:   Float,                      // pressure at DOWN
+    val pMx:  Float,                      // max pressure during gesture
+    val hpv:  Float,                      // pressure variance across UP-batch history
+    val sz:   Float,                      // contact size at UP
+    val ori:  Float,                      // AXIS_ORIENTATION at UP
+    val tsDn: Long,                       // DOWN eventTime
+    val tsUp: Long,                       // UP eventTime
+    val tsSty:Long                        // ms since last stylus UP (-1 if never)
 )
 
-// ─── Shared state across gestures ────────────────────────────────────────
+// ─── Cross-gesture state (single instance, main thread only) ─────────────
 object St {
-    @Volatile var lt  = 0L   // last touch DOWN time
-    @Volatile var lx  = 0f   // last touch x
-    @Volatile var ly  = 0f   // last touch y
-    @Volatile var lUp = 0L   // last confirmed human UP time
-    @Volatile var lSty= 0L   // last stylus UP time (0 = never)
+    var lt   = 0L   // DOWN time of previous gesture
+    var lx   = 0f   // x of previous gesture
+    var ly   = 0f   // y of previous gesture
+    var lUp  = 0L   // UP time of last confirmed-human gesture
+    var lSty = 0L   // UP time of last stylus gesture (0 = never)
 
-    // rolling orientation variance: ghost orientations cluster tightly
-    private val oriRing = FloatArray(16); private var oriHd = 0; var oriN = 0
-    fun pushOri(v: Float) {
-        oriRing[oriHd] = v; oriHd = (oriHd+1)%16; if (oriN<16) oriN++
-    }
+    // Rolling orientation ring: detects ITO-axis ghost clustering
+    private val OR = FloatArray(16)
+    private var oh = 0
+    private var on_ = 0   // count of valid entries
+    fun pushOri(v: Float) { OR[oh]=v; oh=(oh+1)%16; if(on_<16) on_++ }
     fun oriVar(): Float {
-        if (oriN < 4) return 999f   // not enough data yet → unknown
-        val n  = oriN.toFloat()
-        var mu = 0f
-        for (i in 0 until oriN) mu += oriRing[i]
-        mu /= n
-        var v  = 0f
-        for (i in 0 until oriN) { val d = oriRing[i]-mu; v += d*d }
-        return v / n
+        if (on_ < 5) return 999f          // not enough data
+        var mu = 0f; for (i in 0 until on_) mu += OR[i]; mu /= on_
+        var v  = 0f; for (i in 0 until on_) { val d=OR[i]-mu; v+=d*d }
+        return v / on_
     }
+    fun reset() { lt=0L; lx=0f; ly=0f; lUp=0L; lSty=0L; oh=0; on_=0 }
 }
 
-// ─── Build Ctx from live MotionEvent stream ───────────────────────────────
+// ─── Accumulates samples for one gesture ─────────────────────────────────
 class CtxBuilder {
-    private var t0  = 0L;  private var x0 = 0f;  private var y0 = 0f
-    private var p0  = 0f;  private var pMx = 0f
+    private var t0  = 0L
+    private var p0  = 0f
+    private var pMx = 0f
     private val pts = mutableListOf<Pair<Float,Float>>()
 
     fun down(e: MotionEvent) {
-        t0=e.eventTime; x0=e.x; y0=e.y; p0=e.pressure; pMx=e.pressure
-        pts.clear(); pts.add(x0 to y0)
+        t0=e.eventTime; p0=e.pressure; pMx=e.pressure
+        pts.clear(); pts.add(e.x to e.y)
     }
 
     fun move(e: MotionEvent) {
-        // consume all batched samples
-        for (h in 0 until e.historySize) pts.add(e.getHistoricalX(0,h) to e.getHistoricalY(0,h))
+        for (h in 0 until e.historySize)
+            pts.add(e.getHistoricalX(0,h) to e.getHistoricalY(0,h))
         pts.add(e.x to e.y)
         if (e.pressure > pMx) pMx = e.pressure
     }
 
     fun up(e: MotionEvent, sen: Sen): Ctx {
         if (e.pressure > pMx) pMx = e.pressure
+        for (h in 0 until e.historySize)
+            pts.add(e.getHistoricalX(0,h) to e.getHistoricalY(0,h))
+        pts.add(e.x to e.y)
 
-        // historical pressure variance from this UP batch
-        val hpv: Float = if (e.historySize >= 3) {
+        // pressure variance across UP batch
+        val hpv = if (e.historySize >= 3) {
             val ps = FloatArray(e.historySize+1) { i ->
                 if (i < e.historySize) e.getHistoricalPressure(0,i) else e.pressure
             }
@@ -82,90 +81,112 @@ class CtxBuilder {
 
         val tmj = e.touchMajor.coerceAtLeast(1f)
         val tmn = e.touchMinor.coerceAtLeast(1f)
-        val tsSty = if (St.lSty > 0L) e.eventTime - St.lSty else -1L
 
         return Ctx(
             dw   = (e.eventTime - t0).toInt().coerceIn(1, 10_000),
-            hs   = e.historySize + pts.size,
             pts  = pts.toList(),
-            ecc  = (tmj / tmn).coerceIn(1f, 10f),
-            acc  = sen.peak(t0),              // window centred on DOWN time
+            ecc  = (tmj/tmn).coerceIn(1f, 10f),
+            // window spans DOWN→UP plus sensor-delay margin each side
+            acc  = sen.peak(t0, e.eventTime),
             iv   = if (St.lt > 0L) e.eventTime - St.lt else Long.MAX_VALUE,
-            px   = e.x, py = e.y,
+            px   = e.x,  py = e.y,
             prs  = e.pressure, p0 = p0, pMx = pMx,
             hpv  = hpv,
             sz   = e.size,
-            tmj  = tmj, tmn = tmn,
             ori  = e.getAxisValue(MotionEvent.AXIS_ORIENTATION),
-            tsDn = t0,
-            tsSty= tsSty
+            tsDn = t0, tsUp = e.eventTime,
+            tsSty= if (St.lSty > 0L) e.eventTime - St.lSty else -1L
         )
     }
 }
 
-// ─── Spatial jitter: RMS deviation from mean position ────────────────────
+// ─── Spatial jitter: RMS of positions from their mean ────────────────────
+// Ghost pooling < 2.5px; human tremor > 3.5px (autonomic 8-12Hz)
 fun sj(pts: List<Pair<Float,Float>>): Float {
-    if (pts.size < 3) return -1f   // -1 = insufficient data
-    var sx = 0f; var sy = 0f
-    for (p in pts) { sx += p.first; sy += p.second }
-    val mx = sx / pts.size; val my = sy / pts.size
-    var ss = 0f
+    if (pts.size < 4) return -1f
+    var sx=0f; var sy=0f
+    for (p in pts) { sx+=p.first; sy+=p.second }
+    val mx=sx/pts.size; val my=sy/pts.size
+    var ss=0f
     for (p in pts) { val dx=p.first-mx; val dy=p.second-my; ss+=dx*dx+dy*dy }
-    return sqrt(ss / pts.size)
+    return sqrt(ss/pts.size)
 }
 
-// ─── Pressure slope: rate of pressure build-up (flesh ramps, water spikes)
+// ─── Pressure slope: flesh ramps gradually, water is instantaneous ────────
 fun pSlp(c: Ctx): Float = if (c.dw > 0) (c.pMx - c.p0) / c.dw else 0f
 
-// ─── Core decision: returns true = ghost, false = human ──────────────────
-fun isG(c: Ctx, zones: List<Z>): Boolean = isGScored(c, zones).first
+// ─── Verdict + scores for stats overlay ──────────────────────────────────
+data class Vrd(val ghost: Boolean, val h: Int, val g: Int, val j: Float, val why: String)
 
-// ─── Scored version: returns (isGhost, Stat) for logging and stats overlay
-fun isGScored(c: Ctx, zones: List<Z>): Pair<Boolean, Stat> {
+// ─── Main detection function ──────────────────────────────────────────────
+fun decide(c: Ctx, zones: List<Z>): Vrd {
 
-    // ── TIER 1: Absolute ALLOW ────────────────────────────────────────────
+    // ── TIER 1: Unconditional ALLOW ───────────────────────────────────────
+    // Any single definitive human signal ends evaluation immediately.
+
     if (zones.any { it.has(c.px, c.py) })
-        return false to Stat(9, 0, false, -1f, c.acc, c.dw, 0)
+        return Vrd(false, 9, 0, -1f, "SafeZone")
+
+    // Strong physical impact (Newtonian mass on glass)
     if (c.acc >= K.AT)
-        return false to Stat(9, 0, false, -1f, c.acc, c.dw, 0)
-    if (c.sz >= K.SH && c.prs >= K.PH && c.ecc < K.EG)
-        return false to Stat(9, 0, false, -1f, c.acc, c.dw, 0)
+        return Vrd(false, 9, 0, -1f, "Accel:${c.acc}")
+
+    // Flesh geometry: round contact AND minimum size AND pressure together
+    // Require ALL THREE — water can satisfy one or two individually
+    if (c.sz >= K.SH && c.prs >= K.PH && c.ecc < 1.9f)
+        return Vrd(false, 9, 0, -1f, "Flesh:sz=${c.sz} prs=${c.prs} ecc=${c.ecc}")
+
+    // Gradual pressure ramp — physiologically impossible to fake with water
     if (pSlp(c) >= K.PST && c.dw >= K.DL)
-        return false to Stat(9, 0, false, -1f, c.acc, c.dw, 0)
+        return Vrd(false, 9, 0, -1f, "PSlp:${pSlp(c)}")
 
-    // ── TIER 2: Absolute BLOCK ────────────────────────────────────────────
-    if (c.iv in 1L..(K.BI - 1L)) {
-        val dx = c.px - St.lx; val dy = c.py - St.ly
-        if (sqrt(dx * dx + dy * dy) < K.BD)
-            return true to Stat(0, 6, true, -1f, c.acc, c.dw, 0)
+    // ── TIER 2: Unconditional BLOCK ───────────────────────────────────────
+    // Hardware-signature ghosts: no ambiguity possible.
+
+    // S-Pen electrostatic echo through moisture
+    if (c.tsSty in K.E0..K.E1 && c.dw < 150 && c.acc < K.AT)
+        return Vrd(true, 0, 7, -1f, "Echo:${c.tsSty}ms")
+
+    // Burst at same location (moisture controller glitch)
+    if (c.iv in 1L..(K.BI-1L)) {
+        val dx=c.px-St.lx; val dy=c.py-St.ly
+        if (sqrt(dx*dx+dy*dy) < K.BD)
+            return Vrd(true, 0, 7, -1f, "Burst:${c.iv}ms")
     }
-    if (c.tsSty in K.E0..K.E1 && c.dw < 120 && c.acc < K.AT)
-        return true to Stat(0, 5, true, -1f, c.acc, c.dw, 0)
 
-    // ── TIER 3: Evidence voting ───────────────────────────────────────────
-    var hScore = 0
-    if (c.acc  >= K.AT  * 0.75f)              hScore++
-    if (c.sz   >= K.SH  * 0.80f)              hScore++
-    if (c.prs  >= K.PH)                        hScore++
-    if (c.ecc  <  2.0f)                        hScore++
-    if (c.hpv  >  0.0004f)                     hScore++
+    // ── TIER 3: Multi-signal voting ───────────────────────────────────────
+    // Human: need 2+ independent signals (harder to fake)
+    // Ghost: need 3+ independent signals with ZERO human signals
+
+    var h = 0
+    var g = 0
     val j = sj(c.pts)
-    if (j      >= K.JH)                        hScore++
 
-    if (hScore >= K.HT)
-        return false to Stat(hScore, 0, false, j, c.acc, c.dw, 0)
+    // Human votes — each is an independent physical property
+    if (c.acc  >= K.AT * 0.60f) h++                        // sub-threshold impact
+    if (c.sz   >= K.SH * 0.75f && c.prs >= K.PH*0.70f) h++ // partial flesh contact
+    if (c.ecc  <  1.85f)        h++                        // round = fingertip pad
+    if (c.hpv  >  0.0003f)      h++                        // pressure variability
+    if (j      >= K.JH)         h++                        // biological tremor
+    if (c.prs  >= K.PH)         h++                        // plausible pressure alone
 
-    var gScore = 0
-    if (c.acc  < K.AT   * 0.50f)              gScore++
-    if (c.ecc  > K.EG)                         gScore++
-    if (c.sz   < K.SH   * 0.60f)              gScore++
-    if (c.hpv  < 0.0001f && c.dw >= K.DL)    gScore++
-    if (j in 0f..K.JG   && c.dw >= K.DL)     gScore++
-    if (c.hs   <= 1      && c.dw < K.DL)      gScore++
-
+    // Ghost votes — each is a physical absence of life signal
+    if (c.acc  < K.AT * 0.40f)              g++  // truly zero momentum
+    if (c.ecc  > K.EG)                      g++  // elongated ITO electrode track
+    if (c.sz   < K.SH * 0.55f)             g++  // sub-flesh contact area
+    if (c.hpv  < 0.00008f && c.dw >= K.DL) g++  // perfectly flat pressure
+    if (j in 0f..K.JG  && c.dw >= K.DL)   g++  // zero tremor = static capacitance
+    if (c.prs  < 0.040f)                   g++  // sub-flesh pressure
     val ov = St.oriVar()
-    if (ov < 0.08f && ov >= 0f)               gScore++
+    if (ov < 0.06f && ov >= 0f)            g++  // ITO orientation locked
 
-    val isGhost = gScore >= K.GT
-    return isGhost to Stat(hScore, gScore, isGhost, j, c.acc, c.dw, 0)
+    // Decision rules:
+    // Allow if 2+ human signals (even without full Tier-1 certainty)
+    if (h >= 2) return Vrd(false, h, g, j, "hVote:$h")
+
+    // Block if 3+ ghost signals AND zero human signals
+    if (g >= 3 && h == 0) return Vrd(true, h, g, j, "gVote:$g")
+
+    // Ambiguous (1 human signal, or g<3): bias toward human safety
+    return Vrd(false, h, g, j, "Ambiguous→Allow")
 }
