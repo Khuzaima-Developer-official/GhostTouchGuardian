@@ -13,7 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlin.math.sqrt
 
-// ─── Boot receiver ────────────────────────────────────────────────────────
+// Boot receiver
 class Boot : BroadcastReceiver() {
     override fun onReceive(ctx: Context, i: Intent) {
         val p = P(ctx); if (!p.en && !p.pen) return
@@ -22,7 +22,7 @@ class Boot : BroadcastReceiver() {
     }
 }
 
-// ─── Screen on/off receiver ───────────────────────────────────────────────
+// Screen on/off receiver
 class Scr(val onOn: ()->Unit, val onOff: ()->Unit) : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) = when(i.action) {
         Intent.ACTION_SCREEN_ON  -> onOn()
@@ -31,7 +31,7 @@ class Scr(val onOn: ()->Unit, val onOff: ()->Unit) : BroadcastReceiver() {
     }
 }
 
-// ─── Stats overlay: draggable floating widget ─────────────────────────────
+// Stats overlay: draggable floating widget
 class StatsOvr(ctx: Context) : View(ctx) {
 
     @Volatile var vrd: Vrd? = null
@@ -97,17 +97,13 @@ class StatsOvr(ctx: Context) : View(ctx) {
     }
 }
 
-// ─── Interception overlay: pass-through/block mechanism ──────────────────
-// Default: blocking mode (touchable, intercepts all touches)
-// On human touch: switch to pass-through (FLAG_NOT_TOUCHABLE) + return false
-// Pass-through stays for PT ms after last interaction, then re-arms
+// Interception overlay: pass-through/block mechanism
 class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
 
     private val bld = CtxBuilder()
     private val hnd = Handler(Looper.getMainLooper())
-    private var passThrough = false   // true = FLAG_NOT_TOUCHABLE active
+    private var passThrough = false
 
-    // Re-arm runnable: called after PT ms of pass-through inactivity
     private val reArm = Runnable {
         if (passThrough) {
             passThrough = false
@@ -115,7 +111,6 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
         }
     }
 
-    // Switch overlay to pass-through mode (FLAG_NOT_TOUCHABLE)
     private fun openPassThrough() {
         passThrough = true
         sv.updateOvrFlags(true)
@@ -133,7 +128,6 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
     override fun onTouchEvent(e: MotionEvent): Boolean {
         val tool = e.getToolType(0)
 
-        // Stylus: always pass, track UP time
         if (tool == MotionEvent.TOOL_TYPE_STYLUS) {
             if (e.actionMasked == MotionEvent.ACTION_UP ||
                 e.actionMasked == MotionEvent.ACTION_CANCEL)
@@ -141,9 +135,8 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
             return false
         }
 
-        // S-Pen exclusive: block all capacitive
         if (sv.p.pen) {
-            sv.blocked(Vrd(true,0,9,-1f,"PenMode"))
+            sv.blocked(Vrd(true,0,9,-1f,"PenMode"), null)
             return true
         }
 
@@ -154,41 +147,35 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
                 val v = qDecide(e, sv.sen, zns, sv.p.pen)
 
                 if (v.ghost) {
-                    // Ghost: block entire gesture. We'll get MOVE+UP too.
                     bld.down(e)
                     St.lt=e.eventTime; St.lx=e.x; St.ly=e.y
-                    sv.blocked(v)
+                    sv.blocked(v, null)
                     return true
                 }
 
-                // Human or unknown: open pass-through, let app get this DOWN
                 St.lt=e.eventTime; St.lx=e.x; St.ly=e.y
                 St.lUp=e.eventTime
                 openPassThrough()
                 sv.allowed(v)
-                return false  // Android forwards this DOWN to underlying app
+                return false
             }
 
             MotionEvent.ACTION_MOVE -> {
                 bld.move(e)
-                return true  // Consume: this is a blocked gesture
+                return true
             }
 
             MotionEvent.ACTION_UP -> {
-                // We only reach here for BLOCKED touches (returned true for DOWN)
-                // Run full decide() for logging/stats confirmation
                 val c = bld.up(e, sv.sen)
                 val zns = ZStore.fromJson(sv.p.zns)
                 val v = decide(c, zns)
 
-                // If full analysis says it was actually human, log it
-                // (touch already blocked, can't undo — but log for threshold tuning)
                 if (!v.ghost) {
-                    Log.w("GTG", "FALSE BLOCK: ${v.why} h=${v.h} g=${v.g} j=${v.j}")
+                    Log.w("GTG", "FALSE BLOCK? ${v.why} h=${v.h} g=${v.g} j=${v.j}")
                 }
 
-                sv.blocked(v)
-                return true  // Consume UP
+                sv.blocked(v, c)
+                return true
             }
 
             MotionEvent.ACTION_CANCEL -> return true
@@ -197,7 +184,7 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
     }
 }
 
-// ─── Foreground service ───────────────────────────────────────────────────
+// Foreground service
 class Svc : Service() {
 
     lateinit var p:  P
@@ -215,6 +202,8 @@ class Svc : Service() {
         p   = P(this)
         sen = Sen(this).also { it.start() }
         wm  = getSystemService(WINDOW_SERVICE) as WindowManager
+        Rec.load(p)      // load adaptive thresholds
+        Rec.open(this)   // open CSV log file
         mkCh(); startFg()
         if (p.en || p.pen) attachOvr()
         if (p.stats)        attachSov()
@@ -227,26 +216,33 @@ class Svc : Service() {
             K.A_TOGGLE -> { p.en = !p.en;  if (p.en) attachOvr() else detachOvr(); updN() }
             K.A_PEN    -> { p.pen= !p.pen; if (p.pen) attachOvr(); updN() }
             K.A_STATS  -> { p.stats= !p.stats; if(p.stats) attachSov() else detachSov(); updN() }
+            K.A_WRONG  -> {
+                val msg = Rec.err(p)
+                android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+                updN()
+            }
             K.A_STOP   -> { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         }
         return START_STICKY
     }
 
-    fun blocked(v: Vrd) {
+    fun blocked(v: Vrd, c: Ctx?) {
         p.blk = p.blk + 1
         Log.d("GTG", "BLOCK h=${v.h} g=${v.g} j=${v.j} ${v.why}")
+        Rec.rec(v, c)       // record to CSV + store as last for error feedback
         sov?.let { it.vrd=v; it.ttl=p.blk; it.postInvalidate() }
         updN()
     }
 
     fun allowed(v: Vrd) {
         Log.d("GTG", "ALLOW h=${v.h} g=${v.g} ${v.why}")
+        Rec.rec(v, null)    // record to CSV (no full Ctx for passed touches)
         sov?.let { it.vrd=v; it.ttl=p.blk; it.postInvalidate() }
     }
 
-    // ── Overlay management ────────────────────────────────────────────────
-    private fun mkLp(): WindowManager.LayoutParams {
-        return WindowManager.LayoutParams(
+    // Overlay management
+    private fun mkLp(): WindowManager.LayoutParams =
+        WindowManager.LayoutParams(
             MATCH_PARENT, MATCH_PARENT,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 TYPE_APPLICATION_OVERLAY
@@ -254,7 +250,6 @@ class Svc : Service() {
             FLAG_NOT_FOCUSABLE or FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-    }
 
     private fun attachOvr() {
         if (ovr != null || !canOvr()) return
@@ -265,15 +260,11 @@ class Svc : Service() {
         ovr?.let{try{wm.removeView(it)}catch(_:Exception){}}; ovr=null; ovrLp=null
     }
 
-    // Toggle FLAG_NOT_TOUCHABLE on the overlay (pass-through vs blocking)
     fun updateOvrFlags(passThrough: Boolean) {
         val lp = ovrLp ?: return
         val o = ovr ?: return
-        if (passThrough) {
-            lp.flags = lp.flags or FLAG_NOT_TOUCHABLE
-        } else {
-            lp.flags = lp.flags and FLAG_NOT_TOUCHABLE.inv()
-        }
+        if (passThrough) lp.flags = lp.flags or FLAG_NOT_TOUCHABLE
+        else lp.flags = lp.flags and FLAG_NOT_TOUCHABLE.inv()
         try { wm.updateViewLayout(o, lp) } catch(_:Exception) {}
     }
 
@@ -286,7 +277,6 @@ class Svc : Service() {
     private fun canOvr() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
         android.provider.Settings.canDrawOverlays(this) else true
 
-    // ── Screen receiver ───────────────────────────────────────────────────
     private fun regScr() {
         scr = Scr(
             onOn  = { sen.start(); if (p.en||p.pen) attachOvr() },
@@ -307,13 +297,14 @@ class Svc : Service() {
     override fun onDestroy() {
         super.onDestroy()
         detachOvr(); detachSov(); sen.stop()
+        Rec.close()
         scr?.let { try { unregisterReceiver(it) } catch(_:Exception){} }
         inst = null
     }
 
     override fun onBind(i: Intent?): IBinder? = null
 
-    // ── Notification ──────────────────────────────────────────────────────
+    // Notification
     private fun mkCh() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(NotificationManager::class.java)
@@ -350,6 +341,7 @@ class Svc : Service() {
             .addAction(R.drawable.ic_shield, if(p.en) "Pause" else "Resume", spi(1,K.A_TOGGLE))
             .addAction(R.drawable.ic_shield, if(p.pen) "🖊 ON"  else "🖊 OFF", spi(2,K.A_PEN))
             .addAction(R.drawable.ic_shield, if(p.stats)"Stats▲"else "Stats▽", spi(3,K.A_STATS))
+            .addAction(R.drawable.ic_shield, "Wrong?", spi(4,K.A_WRONG))
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()

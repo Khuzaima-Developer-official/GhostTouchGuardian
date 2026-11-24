@@ -13,7 +13,6 @@ android {
         targetSdk     = 35
         versionCode   = 25
         versionName   = "4.0.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -59,7 +58,6 @@ android {
         viewBinding = true
     }
 
-    // Removes unused ABI splits — smaller APK
     splits {
         abi {
             isEnable = true
@@ -85,5 +83,4 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
 }

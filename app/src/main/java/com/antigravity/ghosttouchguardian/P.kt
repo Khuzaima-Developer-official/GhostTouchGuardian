@@ -3,7 +3,7 @@ package com.antigravity.ghosttouchguardian
 import android.content.Context
 import android.content.SharedPreferences
 
-/** Thin SharedPreferences wrapper. Handles one-time migration from v3.x keys. */
+/** Thin SharedPreferences wrapper. Handles migration from v3.x. */
 class P(ctx: Context) {
 
     private val sp: SharedPreferences =
@@ -11,27 +11,35 @@ class P(ctx: Context) {
 
     init { migrate(ctx) }
 
-    var en: Boolean  // guardian enabled
+    var en: Boolean
         get() = sp.getBoolean(K.PK_EN, true)
         set(v) { sp.edit().putBoolean(K.PK_EN, v).apply() }
 
-    var pen: Boolean // S-Pen exclusive mode
+    var pen: Boolean
         get() = sp.getBoolean(K.PK_PEN, false)
         set(v) { sp.edit().putBoolean(K.PK_PEN, v).apply() }
 
-    var blk: Long    // lifetime blocked count
+    var blk: Long
         get() = sp.getLong(K.PK_BLK, 0L)
         set(v) { sp.edit().putLong(K.PK_BLK, v).apply() }
 
-    var zns: String  // safe zones JSON array
+    var zns: String
         get() = sp.getString(K.PK_ZNS, "[]") ?: "[]"
         set(v) { sp.edit().putString(K.PK_ZNS, v).apply() }
 
-    var stats: Boolean  // live stats overlay on/off
+    var stats: Boolean
         get() = sp.getBoolean(K.PK_STS, false)
         set(v) { sp.edit().putBoolean(K.PK_STS, v).apply() }
 
-    /** One-time migration: preserve lifetime block count from old prefs. */
+    // Adaptive thresholds (persisted, loaded by Rec)
+    var aJG: Float
+        get() = sp.getFloat(K.PK_AJG, K.JG)
+        set(v) { sp.edit().putFloat(K.PK_AJG, v).apply() }
+
+    var aJH: Float
+        get() = sp.getFloat(K.PK_AJH, K.JH)
+        set(v) { sp.edit().putFloat(K.PK_AJH, v).apply() }
+
     private fun migrate(ctx: Context) {
         if (sp.contains(K.PK_MIG)) return
         try {
