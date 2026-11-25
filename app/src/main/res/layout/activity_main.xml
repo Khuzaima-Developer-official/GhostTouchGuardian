@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    android:fillViewport="true">
+    android:background="#0A0F1A"
+    tools:context=".UI">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -16,76 +17,110 @@
             android:layout_height="wrap_content"
             android:text="@string/app_name"
             android:textColor="#F1F5F9"
-            android:textSize="22sp"
+            android:textSize="28sp"
             android:textStyle="bold"
+            android:gravity="center"
             android:layout_marginBottom="8dp" />
 
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Initialising…"
-            android:textColor="#00E676"
-            android:textSize="13sp"
+            android:text="⏸ Paused"
+            android:textColor="#8E9BAE"
+            android:textSize="16sp"
+            android:gravity="center"
             android:layout_marginBottom="24dp" />
 
         <Button
             android:id="@+id/btnToggle"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Pause Guardian"
-            android:textSize="15sp"
-            android:background="#1A3D7EFE"
-            android:textColor="#F1F5F9"
-            android:layout_marginBottom="12dp" />
+            android:layout_height="60dp"
+            android:text="Resume Guardian"
+            android:textSize="16sp"
+            android:layout_marginBottom="12dp"
+            android:background="#1A00E676"
+            android:textColor="#F1F5F9" />
 
         <Button
             android:id="@+id/btnPen"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="60dp"
             android:text="S-Pen Mode: OFF"
-            android:textSize="15sp"
-            android:background="#1AFFFFFF"
-            android:textColor="#F1F5F9"
-            android:layout_marginBottom="12dp" />
+            android:textSize="16sp"
+            android:layout_marginBottom="12dp"
+            android:background="#1A3D7EFE"
+            android:textColor="#F1F5F9" />
 
         <Button
             android:id="@+id/btnStats"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="60dp"
             android:text="Stats Overlay: OFF"
-            android:textSize="13sp"
-            android:background="#1AFFFFFF"
-            android:textColor="#8E9BAE"
+            android:textSize="16sp"
+            android:layout_marginBottom="12dp"
+            android:background="#1A8E9BAE"
+            android:textColor="#F1F5F9" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Permissions"
+            android:textColor="#F1F5F9"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"
             android:layout_marginBottom="12dp" />
 
         <Button
             android:id="@+id/btnOverlay"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Overlay permission"
-            android:textSize="13sp"
-            android:background="#1AFFFFFF"
-            android:textColor="#8E9BAE"
-            android:layout_marginBottom="12dp" />
+            android:layout_height="60dp"
+            android:text="⚠ Grant 'Appear on top'"
+            android:textSize="14sp"
+            android:layout_marginBottom="12dp"
+            android:background="#1AFF4B4B"
+            android:textColor="#F1F5F9" />
 
         <Button
             android:id="@+id/btnBattery"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Battery unrestricted"
-            android:textSize="13sp"
-            android:background="#1AFFFFFF"
-            android:textColor="#8E9BAE"
-            android:layout_marginBottom="24dp" />
+            android:layout_height="60dp"
+            android:text="⚡ Allow 24/7 unrestricted"
+            android:textSize="14sp"
+            android:layout_marginBottom="12dp"
+            android:background="#1AFF9800"
+            android:textColor="#F1F5F9" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="How detection works:\n\n1. Physical impact (accelerometer) → allow\n2. Flesh contact + round shape → allow\n3. Gradual pressure ramp → allow\n4. Burst at same location → block\n5. S-Pen echo window → block\n6. Scoring: 3+ ghost signals, 0 human → block\n\nS-Pen Mode: blocks ALL capacitive input.\n\nNo internet. No tracking. No data collection."
-            android:textColor="#4E5D73"
-            android:textSize="12sp"
-            android:lineSpacingExtra="3dp" />
+            android:text="Advanced"
+            android:textColor="#F1F5F9"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/btnSafeZones"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="Safe Zones Editor"
+            android:textSize="14sp"
+            android:layout_marginBottom="12dp"
+            android:background="#1A6A1B9A"
+            android:textColor="#F1F5F9" />
+
+        <Button
+            android:id="@+id/btnStatsDashboard"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="Statistics Dashboard"
+            android:textSize="14sp"
+            android:layout_marginBottom="12dp"
+            android:background="#1A00BCD4"
+            android:textColor="#F1F5F9" />
 
     </LinearLayout>
 </ScrollView>

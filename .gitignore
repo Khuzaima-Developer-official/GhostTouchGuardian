@@ -8,4 +8,39 @@
 /captures
 .externalNativeBuild
 .cxx
+
+# Kiro IDE files (AI development tools - local only)
+.kiro/
+
+# Signing keys and keystores (NEVER commit these!)
+*.jks
+*.keystore
+release.jks
+debug.keystore
+
+# Local configuration
 local.properties
+
+# Android Studio
+.idea/
+.gradle/
+
+# Build outputs
+build/
+*/build/
+*.apk
+*.ap_
+*.aab
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

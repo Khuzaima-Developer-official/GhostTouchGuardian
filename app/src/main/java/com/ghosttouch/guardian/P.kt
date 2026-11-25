@@ -1,4 +1,4 @@
-package com.antigravity.ghosttouchguardian
+package com.ghosttouch.guardian
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -48,7 +48,7 @@ class P(ctx: Context) {
             if (oldBlk > 0L) blk = oldBlk
             val oldPen = old.getBoolean("pref_spen_mode_active", false)
             if (oldPen) pen = true
-        } catch (_: Exception) {}
+        } catch (e: Exception) { L.w(Tags.PREFS, "Migration from v3 failed (OK if fresh install)", e) }
         sp.edit().putBoolean(K.PK_MIG, true).apply()
     }
 }

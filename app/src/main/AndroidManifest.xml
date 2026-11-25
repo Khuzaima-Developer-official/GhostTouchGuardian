@@ -60,6 +60,20 @@
             </intent-filter>
         </receiver>
 
+            <activity
+            android:name=".StatsActivity"
+            android:screenOrientation="portrait"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+
+        <activity
+            android:name=".SafeZoneEditorActivity"
+            android:screenOrientation="portrait"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+
+        <activity
+            android:name=".ThresholdTunerActivity"
+            android:screenOrientation="portrait"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
     </application>
 
 </manifest>

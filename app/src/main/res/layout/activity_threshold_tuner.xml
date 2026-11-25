@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0F1A">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Threshold Tuner"
+            android:textColor="#F1F5F9"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Spatial Jitter"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvJG"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="JG (Ghost Max): 2.00px"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvJH"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="JH (Human Min): 15.00px"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvAdaptiveJG"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Adaptive JG: 2.00px"
+            android:textColor="#8E9BAE"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvAdaptiveJH"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Adaptive JH: 15.00px"
+            android:textColor="#8E9BAE"
+            android:textSize="14sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="S Pen Echo Window"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvE0"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="E0 (Echo Start): 50ms"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvE1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="E1 (Echo End): 500ms"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Accelerometer"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvAT"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="AT (Accel Threshold): 0.100 m/s²"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Geometry &amp; Pressure"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvEG"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="EG (Eccentricity Ghost): 1.80"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvSH"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SH (Size Human): 0.009"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvPH"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="PH (Pressure Human): 0.100"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Burst Detection"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvBI"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="BI (Burst Interval): 20ms"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvBD"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="BD (Burst Distance): 15.0px"
+            android:textColor="#F1F5F9"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnResetThresholds"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Reset to Defaults"
+                android:layout_marginEnd="8dp"
+                android:background="#1AFF4B4B"
+                android:textColor="#F1F5F9" />
+
+            <Button
+                android:id="@+id/btnClose"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Close"
+                android:background="#1A3D7EFE"
+                android:textColor="#F1F5F9" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

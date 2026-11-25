@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="12dp"
+    android:background="#1A3D7EFE">
+
+    <TextView
+        android:id="@+id/tvZoneInfo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Zone #1: (100, 200) 300x400px"
+        android:textColor="#F1F5F9"
+        android:textSize="14sp" />
+
+    <Button
+        android:id="@+id/btnDelete"
+        android:layout_width="80dp"
+        android:layout_height="40dp"
+        android:text="Delete"
+        android:textSize="12sp"
+        android:background="#1AFF4B4B"
+        android:textColor="#F1F5F9" />
+
+</LinearLayout>

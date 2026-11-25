@@ -1,4 +1,4 @@
-package com.antigravity.ghosttouchguardian
+package com.ghosttouch.guardian
 
 import android.content.Intent
 import android.net.Uri
@@ -8,7 +8,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.antigravity.ghosttouchguardian.databinding.ActivityMainBinding
+import com.ghosttouch.guardian.databinding.ActivityMainBinding
 
 class UI : AppCompatActivity() {
 
@@ -54,7 +54,14 @@ class UI : AppCompatActivity() {
         b.btnPen.setOnClickListener     { startSvc(K.A_PEN);    refresh() }
         b.btnStats.setOnClickListener   { startSvc(K.A_STATS);  refresh() }
         b.btnOverlay.setOnClickListener { ensureOverlay() }
-        b.btnBattery.setOnClickListener { requestBatt() }
+                b.btnBattery.setOnClickListener { requestBatt() }
+
+                b.btnSafeZones.setOnClickListener {
+            startActivity(Intent(this, SafeZoneEditorActivity::class.java))
+        }
+        b.btnStatsDashboard.setOnClickListener {
+            startActivity(Intent(this, StatsActivity::class.java))
+        }
     }
 
     private fun startSvc(action: String) =

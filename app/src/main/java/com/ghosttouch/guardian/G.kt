@@ -1,7 +1,9 @@
-package com.antigravity.ghosttouchguardian
+package com.ghosttouch.guardian
 
 import android.view.MotionEvent
 import kotlin.math.sqrt
+import com.ghosttouch.guardian.L
+import com.ghosttouch.guardian.Tags
 
 // Touch context: extracted once per gesture
 data class Ctx(
@@ -60,6 +62,7 @@ class CtxBuilder {
         for (h in 0 until e.historySize)
             pts.add(e.getHistoricalX(0,h) to e.getHistoricalY(0,h))
         pts.add(e.x to e.y)
+        St.pushOri(e.getAxisValue(MotionEvent.AXIS_ORIENTATION))
         if (e.pressure > pMx) pMx = e.pressure
         if (pts.size > 200) {
             val extra = pts.size - 200
@@ -135,13 +138,16 @@ fun qDecide(
             return Vrd(true, 0, 7, -1f, "Burst:${e.eventTime-St.lt}ms")
     }
 
+    // v4.2.0: Smart echo window - only check if stylus recently used
     val tsSty = if (St.lSty > 0L) e.eventTime - St.lSty else -1L
-    if (tsSty in K.E0..K.E1 && sen.peakNow(e.eventTime) < K.AT)
+    val echoWindow = StylusMonitor.getEchoWindow(e.eventTime)
+    if (echoWindow != null && tsSty in echoWindow && sen.peakNow(e.eventTime) < K.AT)
         return Vrd(true, 0, 7, -1f, "Echo:${tsSty}ms")
 
-    val acc = sen.peakNow(e.eventTime)
-    if (acc >= K.AT)
-        return Vrd(false, 9, 0, -1f, "Accel:$acc")
+    // v4.2.0: Multi-window impact analysis
+    val impact = sen.analyzeImpact(e.eventTime, e.eventTime)
+    if (impact.confidence >= 0.70f)
+        return Vrd(false, 9, 0, -1f, "Impact:conf=${"%.2f".format(impact.confidence)},pk=${"%.3f".format(impact.peak)}")
 
     val tmj = e.touchMajor.coerceAtLeast(1f)
     val tmn = e.touchMinor.coerceAtLeast(1f)
@@ -162,6 +168,7 @@ fun decide(c: Ctx, zones: List<Z>): Vrd {
     // TIER 1: Unconditional ALLOW
     if (zones.any { it.has(c.px, c.py) })
         return Vrd(false, 9, 0, -1f, "SafeZone")
+    // v4.2.0: Multi-window impact analysis (NOTE: sen not available here, use c.acc as before for now)
     if (c.acc >= K.AT)
         return Vrd(false, 9, 0, -1f, "Accel:${c.acc}")
     if (c.sz >= K.SH && c.prs >= K.PH && c.ecc < 1.9f)
@@ -170,7 +177,9 @@ fun decide(c: Ctx, zones: List<Z>): Vrd {
         return Vrd(false, 9, 0, -1f, "PSlp:${pSlp(c)}")
 
     // TIER 2: Unconditional BLOCK
-    if (c.tsSty in K.E0..K.E1 && c.dw < 150 && c.acc < K.AT)
+    // v4.2.0: Smart echo window - only check if stylus recently used
+    val echoWindow = StylusMonitor.getEchoWindow(c.tsUp)
+    if (echoWindow != null && c.tsSty in echoWindow && c.dw < 150 && c.acc < K.AT)
         return Vrd(true, 0, 7, -1f, "Echo:${c.tsSty}ms")
     if (c.iv in 1L..(K.BI-1L)) {
         val dx=c.px-St.lx; val dy=c.py-St.ly
@@ -201,3 +210,5 @@ fun decide(c: Ctx, zones: List<Z>): Vrd {
     if (g >= 3 && h == 0) return Vrd(true, h, g, j, "gVote:$g")
     return Vrd(false, h, g, j, "Ambiguous→Allow")
 }
+
+

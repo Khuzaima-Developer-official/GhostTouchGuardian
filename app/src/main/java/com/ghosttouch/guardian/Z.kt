@@ -1,4 +1,4 @@
-package com.antigravity.ghosttouchguardian
+package com.ghosttouch.guardian
 
 import org.json.JSONArray
 import org.json.JSONObject

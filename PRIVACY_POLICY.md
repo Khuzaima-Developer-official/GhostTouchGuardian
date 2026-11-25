@@ -1,9 +1,9 @@
 # Privacy Policy — Ghost Touch Guardian
 
 **Last updated:** November 2026  
-**Developer:** Khuzaima Developer  
+**Developer:** GTG Team  
 **App:** Ghost Touch Guardian  
-**Package:** `com.antigravity.ghosttouchguardian`
+**Package:** `com.ghosttouch.guardian`
 
 ---
 
@@ -67,4 +67,5 @@ If this policy changes, the updated version will be posted at this URL with a ne
 ## 7. Contact
 
 For questions: open an issue at  
-https://github.com/Khuzaima-Developer-official/GhostTouchGuardian/issues
+https://github.com/ghosttouch-guardian/GhostTouchGuardian/issues
+

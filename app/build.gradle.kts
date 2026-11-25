@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace  = "com.antigravity.ghosttouchguardian"
+    namespace  = "com.ghosttouch.guardian"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.antigravity.ghosttouchguardian"
+        applicationId = "com.ghosttouch.guardian"
         minSdk        = 26
         targetSdk     = 35
-        versionCode   = 25
-        versionName   = "4.0.0"
+        versionCode   = 27
+        versionName   = "4.2.0"
     }
 
     signingConfigs {
@@ -82,5 +82,13 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
+        implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+
+    // Testing dependencies
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.mockito:mockito-core:5.3.1")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
 }
+

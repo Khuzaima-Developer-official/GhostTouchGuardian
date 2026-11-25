@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Detection Statistics"
+            android:textColor="#F1F5F9"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+        <TextView
+            android:id="@+id/tvTotalBlocks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Total Blocks: 0"
+            android:textColor="#00E676"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+        <TextView
+            android:id="@+id/tvTotalAllows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Total Allows: 0"
+            android:textColor="#8E9BAE"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+        <TextView
+            android:id="@+id/tvFalsePositives"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="False Positives: 0"
+            android:textColor="#FF4B4B"
+            android:textSize="14sp"
+            android:layout_marginBottom="8dp" />
+        <TextView
+            android:id="@+id/tvFalseNegatives"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="False Negatives: 0"
+            android:textColor="#FF4B4B"
+            android:textSize="14sp"
+            android:layout_marginBottom="8dp" />
+        <TextView
+            android:id="@+id/tvAccuracy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Accuracy: 100.0%"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Top Block Reasons"
+            android:textColor="#F1F5F9"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/reasonList"
+            android:layout_width="match_parent"
+            android:layout_height="300dp"
+            android:background="#1AFFFFFF"
+            android:layout_marginBottom="24dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/btnRefresh"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Refresh"
+                android:layout_marginEnd="8dp"
+                android:background="#1A3D7EFE"
+                android:textColor="#F1F5F9" />
+            <Button
+                android:id="@+id/btnResetStats"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Reset"
+                android:layout_marginEnd="8dp"
+                android:background="#1AFF4B4B"
+                android:textColor="#F1F5F9" />
+            <Button
+                android:id="@+id/btnClose"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Close"
+                android:background="#1A00E676"
+                android:textColor="#F1F5F9" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

@@ -1,4 +1,4 @@
-package com.antigravity.ghosttouchguardian
+package com.ghosttouch.guardian
 
 import android.app.*
 import android.content.*
@@ -11,6 +11,8 @@ import android.view.*
 import android.view.WindowManager.LayoutParams.*
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.ghosttouch.guardian.L
+import com.ghosttouch.guardian.Tags
 import kotlin.math.sqrt
 
 // Boot receiver
@@ -78,7 +80,9 @@ class StatsOvr(ctx: Context) : View(ctx) {
                 try {
                     (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
                         .updateViewLayout(this, mkLp(nx, ny))
-                } catch(_:Exception){}
+                } catch(e: Exception) {
+                    L.w(Tags.OVERLAY, "Failed to update stats overlay layout", e)
+                }
             }
         }
         return true
@@ -120,8 +124,10 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
 
     override fun onHoverEvent(e: MotionEvent): Boolean {
         if (e.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS &&
-            e.actionMasked == MotionEvent.ACTION_HOVER_EXIT)
+            e.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
             St.lSty = e.eventTime
+            StylusMonitor.recordStylusTouch(e.eventTime)  // v4.2.0
+        }
         return false
     }
 
@@ -130,8 +136,10 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
 
         if (tool == MotionEvent.TOOL_TYPE_STYLUS) {
             if (e.actionMasked == MotionEvent.ACTION_UP ||
-                e.actionMasked == MotionEvent.ACTION_CANCEL)
+                e.actionMasked == MotionEvent.ACTION_CANCEL) {
                 St.lSty = e.eventTime
+                StylusMonitor.recordStylusTouch(e.eventTime)  // v4.2.0
+            }
             return false
         }
 
@@ -143,7 +151,7 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
         when (e.actionMasked) {
 
             MotionEvent.ACTION_DOWN -> {
-                val zns = ZStore.fromJson(sv.p.zns)
+                val zns = sv.cachedZones
                 val v = qDecide(e, sv.sen, zns, sv.p.pen)
 
                 if (v.ghost) {
@@ -167,12 +175,14 @@ class Ovr(ctx: Context, private val sv: Svc) : View(ctx) {
 
             MotionEvent.ACTION_UP -> {
                 val c = bld.up(e, sv.sen)
-                val zns = ZStore.fromJson(sv.p.zns)
+                val zns = sv.cachedZones
                 val v = decide(c, zns)
 
                 if (!v.ghost) {
-                    Log.w("GTG", "FALSE BLOCK? ${v.why} h=${v.h} g=${v.g} j=${v.j}")
+                    L.w(Tags.DETECTION, "FALSE BLOCK? ${v.why} h=${v.h} g=${v.g} j=${v.j}")
                 }
+
+                St.lUp = e.eventTime
 
                 sv.blocked(v, c)
                 return true
@@ -194,23 +204,29 @@ class Svc : Service() {
     private var ovrLp: WindowManager.LayoutParams? = null
     private var sov: StatsOvr? = null
     private var scr: Scr?      = null
+    @Volatile internal var cachedZones: List<Z> = emptyList()
 
     companion object { @Volatile var inst: Svc? = null }
 
     override fun onCreate() {
         super.onCreate(); inst = this
+        L.i(Tags.SERVICE, "Service creating")
         p   = P(this)
         sen = Sen(this).also { it.start() }
         wm  = getSystemService(WINDOW_SERVICE) as WindowManager
-        Rec.load(p)      // load adaptive thresholds
+        Rec.load(p)
+        Stats.init(this)      // load adaptive thresholds
         Rec.open(this)   // open CSV log file
+        reloadZones()   // cache safe zones
         mkCh(); startFg()
         if (p.en || p.pen) attachOvr()
         if (p.stats)        attachSov()
         regScr()
+        L.i(Tags.SERVICE, "Service created successfully")
     }
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
+        L.i(Tags.SERVICE, "onStartCommand action=${i?.action}")
         mkCh(); startFg()
         when (i?.action) {
             K.A_TOGGLE -> { p.en = !p.en;  if (p.en) attachOvr() else detachOvr(); updN() }
@@ -226,16 +242,23 @@ class Svc : Service() {
         return START_STICKY
     }
 
+    fun reloadZones() {
+        cachedZones = ZStore.fromJson(p.zns)
+        L.i(Tags.SERVICE, "Reloaded ${cachedZones.size} safe zones")
+    }
+
     fun blocked(v: Vrd, c: Ctx?) {
         p.blk = p.blk + 1
-        Log.d("GTG", "BLOCK h=${v.h} g=${v.g} j=${v.j} ${v.why}")
+        Stats.recordBlock(v.why)
+        L.d(Tags.DETECTION, "BLOCK h=${v.h} g=${v.g} j=${v.j} ${v.why}")
         Rec.rec(v, c)       // record to CSV + store as last for error feedback
         sov?.let { it.vrd=v; it.ttl=p.blk; it.postInvalidate() }
         updN()
     }
 
     fun allowed(v: Vrd) {
-        Log.d("GTG", "ALLOW h=${v.h} g=${v.g} ${v.why}")
+        Stats.recordAllow(v.why)
+        L.d(Tags.DETECTION, "ALLOW h=${v.h} g=${v.g} ${v.why}")
         Rec.rec(v, null)    // record to CSV (no full Ctx for passed touches)
         sov?.let { it.vrd=v; it.ttl=p.blk; it.postInvalidate() }
     }
@@ -253,11 +276,15 @@ class Svc : Service() {
 
     private fun attachOvr() {
         if (ovr != null || !canOvr()) return
+        L.i(Tags.OVERLAY, "Attaching main overlay")
         ovrLp = mkLp()
         ovr = Ovr(this, this).also { wm.addView(it, ovrLp!!) }
     }
     private fun detachOvr() {
-        ovr?.let{try{wm.removeView(it)}catch(_:Exception){}}; ovr=null; ovrLp=null
+        L.i(Tags.OVERLAY, "Detaching main overlay")
+        ovr?.let{try{wm.removeView(it)}catch(e: Exception){
+            L.w(Tags.OVERLAY, "Failed to detach overlay", e)
+        }}; ovr=null; ovrLp=null
     }
 
     fun updateOvrFlags(passThrough: Boolean) {
@@ -265,14 +292,22 @@ class Svc : Service() {
         val o = ovr ?: return
         if (passThrough) lp.flags = lp.flags or FLAG_NOT_TOUCHABLE
         else lp.flags = lp.flags and FLAG_NOT_TOUCHABLE.inv()
-        try { wm.updateViewLayout(o, lp) } catch(_:Exception) {}
+        try { wm.updateViewLayout(o, lp) } catch(e: Exception) {
+            L.w(Tags.OVERLAY, "Failed to update overlay flags", e)
+        }
     }
 
     private fun attachSov() {
         if (sov != null || !canOvr()) return
+        L.i(Tags.OVERLAY, "Attaching stats overlay")
         sov = StatsOvr(this).also { wm.addView(it, StatsOvr.mkLp()) }
     }
-    private fun detachSov() { sov?.let{try{wm.removeView(it)}catch(_:Exception){}}; sov=null }
+    private fun detachSov() {
+        L.i(Tags.OVERLAY, "Detaching stats overlay")
+        sov?.let{try{wm.removeView(it)}catch(e: Exception){
+            L.w(Tags.OVERLAY, "Failed to detach stats overlay", e)
+        }}; sov=null
+    }
 
     private fun canOvr() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
         android.provider.Settings.canDrawOverlays(this) else true
@@ -295,11 +330,15 @@ class Svc : Service() {
     }
 
     override fun onDestroy() {
+        L.i(Tags.SERVICE, "Service destroying")
         super.onDestroy()
         detachOvr(); detachSov(); sen.stop()
         Rec.close()
-        scr?.let { try { unregisterReceiver(it) } catch(_:Exception){} }
+        scr?.let { try { unregisterReceiver(it) } catch(e: Exception){
+            L.w(Tags.SERVICE, "Failed to unregister screen receiver", e)
+        } }
         inst = null
+        L.i(Tags.SERVICE, "Service destroyed")
     }
 
     override fun onBind(i: Intent?): IBinder? = null
@@ -319,7 +358,9 @@ class Svc : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
             startForeground(K.N_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         else startForeground(K.N_ID, n)
-    } catch(_:Exception) {}
+    } catch(e: Exception) {
+        L.e(Tags.SERVICE, "Failed to start foreground service", e)
+    }
 
     fun updN() = (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
         .notify(K.N_ID, buildN())
@@ -347,3 +388,4 @@ class Svc : Service() {
             .build()
     }
 }
+
