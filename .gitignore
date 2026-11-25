@@ -9,6 +9,9 @@
 .externalNativeBuild
 .cxx
 
+#Github
+.github/
+
 # Kiro IDE files (AI development tools - local only)
 .kiro/
 
